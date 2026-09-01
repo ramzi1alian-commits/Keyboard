@@ -219,6 +219,15 @@ class SecureInputMethodService : InputMethodService() {
     private var showingEmoji = false
     private var showingCrypto = false
     private var showingSecureCompose = false
+    // True from the moment the user enters secure-compose mode until
+    // they explicitly tap "رجوع" on that screen. While true,
+    // onStartInputView/onFinishInputView restore secure mode instead of
+    // silently dropping it - otherwise the target app's own send button
+    // (which can drop and re-grant this keyboard's input focus, e.g.
+    // WhatsApp) would kick the user back to the normal keyboard after
+    // every single message, forcing them to re-open secure mode by hand
+    // each time. See both callbacks below.
+    private var secureComposeSticky = false
     private var englishShiftOn = false
     // Message body while in secure-compose mode (see buildSecureComposePage
     // below) - deliberately NEVER passed to the InputConnection until the
@@ -373,6 +382,7 @@ class SecureInputMethodService : InputMethodService() {
         composeBuffer.setLength(0)
         composePreviewView = null
         showingSecureCompose = false
+        secureComposeSticky = false
         // Any decrypted result being shown inline on this same screen
         // (see buildSecureComposePage) is sensitive plaintext - don't
         // leave it sitting in memory once the user has explicitly left
@@ -592,6 +602,7 @@ class SecureInputMethodService : InputMethodService() {
         val composeRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         composeRow.addView(makeKey(getString(R.string.crypto_panel_secure_compose_btn), weight = 1f, heightDp = heightDp, accented = sessionActive) {
             showingSecureCompose = true
+            secureComposeSticky = true
             rebuildKeyboardView()
         })
         root.addView(composeRow)
@@ -1360,12 +1371,28 @@ class SecureInputMethodService : InputMethodService() {
         // The AR/EN letter choice itself (letterMode) is left as-is,
         // same as a real keyboard remembering the language you were
         // just using.
+        //
+        // Secure-compose mode is the one exception: while
+        // secureComposeSticky is set, it survives this reset instead of
+        // silently dropping back to the normal keyboard. Without this,
+        // tapping the target app's own send button - which can drop and
+        // re-grant this keyboard's input focus - would exit secure mode
+        // on every single message, forcing the user to navigate back
+        // into it by hand each time. Only the explicit "رجوع" button on
+        // that screen (see clearSecureCompose()) turns stickiness off.
         val cameFromOverlay = showingSymbols || showingEmoji || showingCrypto || showingSecureCompose
         showingSymbols = false
         showingEmoji = false
         showingCrypto = false
+        // Sensitive plaintext from a previous decrypt never survives a
+        // refocus, sticky or not - only the compose screen itself does.
         cryptoDecryptedText = null
-        clearSecureCompose()
+        if (secureComposeSticky) {
+            showingSecureCompose = true
+            composePreviewView = null
+        } else {
+            clearSecureCompose()
+        }
 
         // Suggestions are opt-OUT per field, driven entirely by what the
         // app being typed into declares - never by anything this keyboard
@@ -1430,7 +1457,15 @@ class SecureInputMethodService : InputMethodService() {
         lastFinishedWord = null
         cryptoDecryptedText = null
         showingCrypto = false
-        clearSecureCompose()
+        // See the matching comment in onStartInputView: while
+        // secureComposeSticky is set, secure-compose mode survives this
+        // keyboard view being torn down (e.g. the target app briefly
+        // hiding the keyboard after its own send button is tapped) so
+        // the next onStartInputView reopens straight back into it,
+        // instead of the user having to re-enter it for every message.
+        if (!secureComposeSticky) {
+            clearSecureCompose()
+        }
         updateSuggestions()
         // Cancel any in-flight long-press/tatweel-repeat timer so it
         // can't fire against a key view that's about to be torn down.
