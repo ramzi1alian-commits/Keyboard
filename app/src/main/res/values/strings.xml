@@ -129,4 +129,6 @@
     <string name="crypto_panel_secure_compose_btn">وضع الكتابة الآمنة (زر واحد، بدون لصق)</string>
     <string name="crypto_panel_secure_compose_desc">أفضل خيار: بتكتب رسالتك جوه معاينة داخل الكيبورد نفسه - حقل واتساب مايشوفش ولا حرف صافي إطلاقا. بمجرد ما تدوس "إرسال"، النص المشفر بس هو اللي بيتحط في واتساب مباشرة.</string>
     <string name="crypto_panel_send_btn">🔒 إرسال</string>
+    <string name="crypto_panel_secure_decrypt_btn">🔓 فك تشفير</string>
+    <string name="crypto_panel_sent_toast">تم التشفير والإرسال</string>
 </resources>

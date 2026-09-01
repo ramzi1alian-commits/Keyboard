@@ -373,6 +373,11 @@ class SecureInputMethodService : InputMethodService() {
         composeBuffer.setLength(0)
         composePreviewView = null
         showingSecureCompose = false
+        // Any decrypted result being shown inline on this same screen
+        // (see buildSecureComposePage) is sensitive plaintext - don't
+        // leave it sitting in memory once the user has explicitly left
+        // secure mode via "رجوع".
+        cryptoDecryptedText = null
     }
 
     /**
@@ -651,8 +656,22 @@ class SecureInputMethodService : InputMethodService() {
      * Service on another app) never sees so much as one character of
      * the plaintext, without needing a separate popup/Activity or a
      * manual copy-paste step either.
+     *
+     * Both actions the user needs while writing a protected message -
+     * encrypting/sending the draft, and reading back a decrypted reply -
+     * live on THIS one screen. Neither one exits secure mode by itself;
+     * the only way out is the explicit "رجوع" button below, so a whole
+     * back-and-forth conversation can happen here without the keyboard
+     * ever dropping back to the normal (non-secure) page in between
+     * messages.
      */
     private fun buildSecureComposePage(root: LinearLayout, heightDp: Int) {
+        val decrypted = cryptoDecryptedText
+        if (decrypted != null) {
+            buildSecureComposeDecryptedResult(root, heightDp, decrypted)
+            return
+        }
+
         val preview = TextView(this).apply {
             setTextColor(Color.WHITE)
             textSize = 16f
@@ -672,6 +691,17 @@ class SecureInputMethodService : InputMethodService() {
             addView(preview)
         }
         root.addView(previewScroll)
+
+        // Encrypt/decrypt actions live right above the keys, always
+        // visible and always reachable without leaving this screen.
+        val actionRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        actionRow.addView(makeKey(getString(R.string.crypto_panel_send_btn), weight = 1f, heightDp = heightDp, accented = true) {
+            sendSecureCompose()
+        })
+        actionRow.addView(makeKey(getString(R.string.crypto_panel_secure_decrypt_btn), weight = 1f, heightDp = heightDp) {
+            decryptClipboardInPlace()
+        })
+        root.addView(actionRow)
 
         val isArabic = letterMode == LetterMode.ARABIC
         val rows = if (isArabic) {
@@ -696,9 +726,10 @@ class SecureInputMethodService : InputMethodService() {
 
         val bottomRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         bottomRow.addView(makeKey("رجوع", weight = 1.3f, heightDp = heightDp) {
-            // Leaving without sending discards the draft entirely - no
-            // "save for later", consistent with nothing here ever being
-            // written to disk.
+            // The ONLY action that leaves secure-compose mode. Leaving
+            // without sending discards the draft entirely - no "save for
+            // later", consistent with nothing here ever being written to
+            // disk.
             clearSecureCompose()
             rebuildKeyboardView()
         })
@@ -710,10 +741,42 @@ class SecureInputMethodService : InputMethodService() {
             if (composeBuffer.isNotEmpty()) composeBuffer.deleteCharAt(composeBuffer.length - 1)
             composePreviewView?.text = composeBuffer.toString()
         })
-        bottomRow.addView(makeKey(getString(R.string.crypto_panel_send_btn), weight = 2f, heightDp = heightDp, accented = true) {
-            sendSecureCompose()
-        })
         root.addView(bottomRow)
+    }
+
+    /**
+     * The decrypted-result sub-view for secure-compose mode: same idea as
+     * buildCryptoPage's result view, but its "إغلاق" button returns to
+     * the compose screen itself (showingSecureCompose is never touched
+     * here), not to the normal keyboard.
+     */
+    private fun buildSecureComposeDecryptedResult(root: LinearLayout, heightDp: Int, decrypted: String) {
+        val padding = dpToPx(8f)
+        val scroll = ScrollView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(heightDp * 2.6f)
+            )
+        }
+        val resultView = TextView(this).apply {
+            text = decrypted
+            setTextColor(Color.WHITE)
+            textSize = 15f
+            setPadding(padding, padding, padding, padding)
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            textDirection = View.TEXT_DIRECTION_RTL
+        }
+        scroll.addView(resultView)
+        root.addView(scroll)
+
+        val closeRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        closeRow.addView(makeKey(getString(R.string.crypto_panel_close_btn), weight = 2f, heightDp = heightDp, accented = true) {
+            // Closes the result only - still on the secure-compose
+            // screen afterward, draft (if any) untouched.
+            cryptoDecryptedText = null
+            rebuildKeyboardView()
+        })
+        root.addView(closeRow)
     }
 
     /** Encrypts composeBuffer and commits ONLY the ciphertext, in one shot, to the active field. */
@@ -737,11 +800,56 @@ class SecureInputMethodService : InputMethodService() {
             // The ONLY thing that ever reaches the target app's field
             // from this whole page.
             currentInputConnection?.commitText(cipherText, 1)
-            clearSecureCompose()
-            showingCrypto = false
+            // Clear the draft for the next message, but deliberately do
+            // NOT touch showingSecureCompose/showingCrypto here - unlike
+            // before, sending a message no longer kicks the user back to
+            // the normal (non-secure) keyboard. They stay right here,
+            // ready to type the next message or decrypt a reply, until
+            // they explicitly tap "رجوع".
+            composeBuffer.setLength(0)
             currentWord.clear()
             lastFinishedWord = null
+            android.widget.Toast.makeText(this, R.string.crypto_panel_sent_toast, android.widget.Toast.LENGTH_SHORT).show()
             rebuildKeyboardView()
+        } finally {
+            java.util.Arrays.fill(passphrase, ' ')
+        }
+    }
+
+    /**
+     * Same clipboard-decrypt logic as decryptClipboard() below, but for
+     * use from INSIDE secure-compose mode: shows the result on this same
+     * screen (via buildSecureComposeDecryptedResult) instead of switching
+     * to the separate crypto menu page. showingCrypto is never set here,
+     * so rebuildKeyboardView() lands back on buildSecureComposePage.
+     */
+    private fun decryptClipboardInPlace() {
+        val passphrase = SessionKeyStore.get()
+        if (passphrase == null) {
+            android.widget.Toast.makeText(this, R.string.crypto_panel_no_session, android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
+            val cm = getSystemService(CLIPBOARD_SERVICE) as? ClipboardManager
+            val clip = cm?.primaryClip
+            val clipText = if (clip != null && clip.itemCount > 0) clip.getItemAt(0).text?.toString() else null
+            if (clipText.isNullOrBlank() || !CryptoEngine.looksLikeCiphertext(clipText)) {
+                android.widget.Toast.makeText(this, R.string.crypto_panel_no_ciphertext_toast, android.widget.Toast.LENGTH_SHORT).show()
+                return
+            }
+            try {
+                val plainChars = CryptoEngine.decrypt(clipText, passphrase)
+                try {
+                    cryptoDecryptedText = String(plainChars)
+                } finally {
+                    java.util.Arrays.fill(plainChars, ' ')
+                }
+                rebuildKeyboardView()
+            } catch (e: CryptoEngine.ExpiredMessageException) {
+                android.widget.Toast.makeText(this, R.string.crypto_panel_expired_toast, android.widget.Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                android.widget.Toast.makeText(this, R.string.crypto_panel_decrypt_failed_toast, android.widget.Toast.LENGTH_SHORT).show()
+            }
         } finally {
             java.util.Arrays.fill(passphrase, ' ')
         }
