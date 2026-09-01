@@ -1073,7 +1073,7 @@ class SecureInputMethodService : InputMethodService() {
         }
 
         val titleView = TextView(this).apply {
-            text = getString(R.string.crypto_panel_decrypted_title)
+            this.text = getString(R.string.crypto_panel_decrypted_title)
             setTextColor(ThemeUtil.accentColor(this@SecureInputMethodService))
             textSize = 13f
             textDirection = View.TEXT_DIRECTION_RTL
