@@ -131,4 +131,6 @@
     <string name="crypto_panel_send_btn">🔒 إرسال</string>
     <string name="crypto_panel_secure_decrypt_btn">🔓 فك تشفير</string>
     <string name="crypto_panel_sent_toast">تم التشفير والإرسال</string>
+    <string name="crypto_panel_encrypting_toast">جارٍ التشفير…</string>
+    <string name="crypto_panel_decrypting_toast">جارٍ فك التشفير…</string>
 </resources>

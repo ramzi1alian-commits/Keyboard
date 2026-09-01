@@ -251,6 +251,22 @@ class SecureInputMethodService : InputMethodService() {
     // makeKey) and removed by reference (never by clearing everything),
     // so one key's timer can never cancel another key's.
     private val longPressHandler = Handler(Looper.getMainLooper())
+    // Argon2id key derivation (see CryptoEngine) is deliberately
+    // expensive - ~1-2s of CPU+memory work by design, to resist
+    // brute-forcing the passphrase offline. Running that on the main
+    // thread would freeze the whole keyboard (and risk an ANR) for that
+    // whole second-plus on every single encrypt/decrypt tap. This single
+    // background thread is where that work actually happens instead;
+    // results are posted back via mainHandler. A single thread (not a
+    // pool) is deliberate - Argon2id at 256 MB is already memory-heavy,
+    // so two of them running at once is something to avoid, not enable.
+    private val cryptoExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private val mainHandler = Handler(Looper.getMainLooper())
+    // Sidesteps a double-tap (or tapping encrypt then decrypt before the
+    // first finishes) queueing up a second heavy Argon2id job while one
+    // is already grinding - the button just shows "جارٍ..." and ignores
+    // further taps until the in-flight one posts back.
+    private var cryptoBusy = false
 
     // Tracks which settings were baked into the currently-built view, so
     // onStartInputView can detect "the user changed something in
@@ -790,40 +806,51 @@ class SecureInputMethodService : InputMethodService() {
         root.addView(closeRow)
     }
 
-    /** Encrypts composeBuffer and commits ONLY the ciphertext, in one shot, to the active field. */
+    /**
+     * Encrypts composeBuffer and commits ONLY the ciphertext, in one shot,
+     * to the active field. The Argon2id+AES work itself (see
+     * CryptoEngine) runs on cryptoExecutor, not here - only the
+     * InputConnection/UI touch-points below run on the main thread.
+     */
     private fun sendSecureCompose() {
         if (composeBuffer.isEmpty()) {
             android.widget.Toast.makeText(this, R.string.crypto_panel_empty_field_toast, android.widget.Toast.LENGTH_SHORT).show()
             return
         }
+        if (cryptoBusy) return
         val passphrase = SessionKeyStore.get()
         if (passphrase == null) {
             android.widget.Toast.makeText(this, R.string.crypto_panel_no_session, android.widget.Toast.LENGTH_SHORT).show()
             return
         }
-        try {
-            val textChars = composeBuffer.toString().toCharArray()
-            val cipherText = try {
-                CryptoEngine.encrypt(textChars, passphrase, expirySeconds = null)
+        val textChars = composeBuffer.toString().toCharArray()
+        cryptoBusy = true
+        android.widget.Toast.makeText(this, R.string.crypto_panel_encrypting_toast, android.widget.Toast.LENGTH_SHORT).show()
+        cryptoExecutor.execute {
+            var cipherText: String? = null
+            try {
+                cipherText = CryptoEngine.encrypt(textChars, passphrase, expirySeconds = null)
             } finally {
                 java.util.Arrays.fill(textChars, ' ')
+                java.util.Arrays.fill(passphrase, ' ')
             }
-            // The ONLY thing that ever reaches the target app's field
-            // from this whole page.
-            currentInputConnection?.commitText(cipherText, 1)
-            // Clear the draft for the next message, but deliberately do
-            // NOT touch showingSecureCompose/showingCrypto here - unlike
-            // before, sending a message no longer kicks the user back to
-            // the normal (non-secure) keyboard. They stay right here,
-            // ready to type the next message or decrypt a reply, until
-            // they explicitly tap "رجوع".
-            composeBuffer.setLength(0)
-            currentWord.clear()
-            lastFinishedWord = null
-            android.widget.Toast.makeText(this, R.string.crypto_panel_sent_toast, android.widget.Toast.LENGTH_SHORT).show()
-            rebuildKeyboardView()
-        } finally {
-            java.util.Arrays.fill(passphrase, ' ')
+            mainHandler.post {
+                cryptoBusy = false
+                // The ONLY thing that ever reaches the target app's field
+                // from this whole page.
+                currentInputConnection?.commitText(cipherText, 1)
+                // Clear the draft for the next message, but deliberately
+                // do NOT touch showingSecureCompose/showingCrypto here -
+                // sending a message no longer kicks the user back to the
+                // normal (non-secure) keyboard. They stay right here,
+                // ready to type the next message or decrypt a reply,
+                // until they explicitly tap "رجوع".
+                composeBuffer.setLength(0)
+                currentWord.clear()
+                lastFinishedWord = null
+                android.widget.Toast.makeText(this, R.string.crypto_panel_sent_toast, android.widget.Toast.LENGTH_SHORT).show()
+                rebuildKeyboardView()
+            }
         }
     }
 
@@ -832,37 +859,56 @@ class SecureInputMethodService : InputMethodService() {
      * use from INSIDE secure-compose mode: shows the result on this same
      * screen (via buildSecureComposeDecryptedResult) instead of switching
      * to the separate crypto menu page. showingCrypto is never set here,
-     * so rebuildKeyboardView() lands back on buildSecureComposePage.
+     * so rebuildKeyboardView() lands back on buildSecureComposePage. The
+     * Argon2id+AES work runs on cryptoExecutor - see sendSecureCompose's
+     * doc for why.
      */
     private fun decryptClipboardInPlace() {
+        if (cryptoBusy) return
         val passphrase = SessionKeyStore.get()
         if (passphrase == null) {
             android.widget.Toast.makeText(this, R.string.crypto_panel_no_session, android.widget.Toast.LENGTH_SHORT).show()
             return
         }
-        try {
-            val cm = getSystemService(CLIPBOARD_SERVICE) as? ClipboardManager
-            val clip = cm?.primaryClip
-            val clipText = if (clip != null && clip.itemCount > 0) clip.getItemAt(0).text?.toString() else null
-            if (clipText.isNullOrBlank() || !CryptoEngine.looksLikeCiphertext(clipText)) {
-                android.widget.Toast.makeText(this, R.string.crypto_panel_no_ciphertext_toast, android.widget.Toast.LENGTH_SHORT).show()
-                return
-            }
+        val cm = getSystemService(CLIPBOARD_SERVICE) as? ClipboardManager
+        val clip = cm?.primaryClip
+        val clipText = if (clip != null && clip.itemCount > 0) clip.getItemAt(0).text?.toString() else null
+        if (clipText.isNullOrBlank() || !CryptoEngine.looksLikeCiphertext(clipText)) {
+            java.util.Arrays.fill(passphrase, ' ')
+            android.widget.Toast.makeText(this, R.string.crypto_panel_no_ciphertext_toast, android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        cryptoBusy = true
+        android.widget.Toast.makeText(this, R.string.crypto_panel_decrypting_toast, android.widget.Toast.LENGTH_SHORT).show()
+        cryptoExecutor.execute {
+            var resultText: String? = null
+            var expired = false
+            var failed = false
             try {
                 val plainChars = CryptoEngine.decrypt(clipText, passphrase)
                 try {
-                    cryptoDecryptedText = String(plainChars)
+                    resultText = String(plainChars)
                 } finally {
                     java.util.Arrays.fill(plainChars, ' ')
                 }
-                rebuildKeyboardView()
             } catch (e: CryptoEngine.ExpiredMessageException) {
-                android.widget.Toast.makeText(this, R.string.crypto_panel_expired_toast, android.widget.Toast.LENGTH_SHORT).show()
+                expired = true
             } catch (e: Exception) {
-                android.widget.Toast.makeText(this, R.string.crypto_panel_decrypt_failed_toast, android.widget.Toast.LENGTH_SHORT).show()
+                failed = true
+            } finally {
+                java.util.Arrays.fill(passphrase, ' ')
             }
-        } finally {
-            java.util.Arrays.fill(passphrase, ' ')
+            mainHandler.post {
+                cryptoBusy = false
+                when {
+                    resultText != null -> {
+                        cryptoDecryptedText = resultText
+                        rebuildKeyboardView()
+                    }
+                    expired -> android.widget.Toast.makeText(this, R.string.crypto_panel_expired_toast, android.widget.Toast.LENGTH_SHORT).show()
+                    else -> android.widget.Toast.makeText(this, R.string.crypto_panel_decrypt_failed_toast, android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
 
@@ -872,35 +918,53 @@ class SecureInputMethodService : InputMethodService() {
      * with the active session passphrase, and replaces the field's
      * content with the ciphertext directly via the InputConnection. No
      * expiry is attached here (that option only exists on the full
-     * Encrypt screen) and the plaintext never touches the clipboard.
+     * Encrypt screen) and the plaintext never touches the clipboard. The
+     * Argon2id+AES work runs on cryptoExecutor - see sendSecureCompose's
+     * doc for why.
      */
     private fun encryptFieldAndInject() {
+        if (cryptoBusy) return
         val passphrase = SessionKeyStore.get()
         if (passphrase == null) {
             android.widget.Toast.makeText(this, R.string.crypto_panel_no_session, android.widget.Toast.LENGTH_SHORT).show()
             return
         }
-        try {
-            val ic = currentInputConnection ?: return
-            val extracted = ic.getExtractedText(ExtractedTextRequest(), 0)
-            val fullText = extracted?.text?.toString().orEmpty()
-            if (fullText.isEmpty()) {
-                android.widget.Toast.makeText(this, R.string.crypto_panel_empty_field_toast, android.widget.Toast.LENGTH_SHORT).show()
-                return
-            }
-            val textChars = fullText.toCharArray()
-            val cipherText = try {
-                CryptoEngine.encrypt(textChars, passphrase, expirySeconds = null)
+        val ic = currentInputConnection
+        if (ic == null) {
+            java.util.Arrays.fill(passphrase, ' ')
+            return
+        }
+        val extracted = ic.getExtractedText(ExtractedTextRequest(), 0)
+        val fullText = extracted?.text?.toString().orEmpty()
+        if (fullText.isEmpty()) {
+            java.util.Arrays.fill(passphrase, ' ')
+            android.widget.Toast.makeText(this, R.string.crypto_panel_empty_field_toast, android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        val textChars = fullText.toCharArray()
+        cryptoBusy = true
+        android.widget.Toast.makeText(this, R.string.crypto_panel_encrypting_toast, android.widget.Toast.LENGTH_SHORT).show()
+        cryptoExecutor.execute {
+            var cipherText: String? = null
+            try {
+                cipherText = CryptoEngine.encrypt(textChars, passphrase, expirySeconds = null)
             } finally {
                 java.util.Arrays.fill(textChars, ' ')
+                java.util.Arrays.fill(passphrase, ' ')
             }
-            ic.setSelection(0, fullText.length)
-            ic.commitText(cipherText, 1)
-            // The field now holds ciphertext, not a word being typed.
-            currentWord.clear()
-            lastFinishedWord = null
-        } finally {
-            java.util.Arrays.fill(passphrase, ' ')
+            mainHandler.post {
+                cryptoBusy = false
+                // Re-fetch the InputConnection fresh here rather than
+                // reusing the one captured above - focus could in theory
+                // have moved on during the ~1-2s of background work, and
+                // InputConnection calls must happen on the main thread.
+                val freshIc = currentInputConnection ?: return@post
+                freshIc.setSelection(0, fullText.length)
+                freshIc.commitText(cipherText, 1)
+                // The field now holds ciphertext, not a word being typed.
+                currentWord.clear()
+                lastFinishedWord = null
+            }
         }
     }
 
@@ -917,38 +981,56 @@ class SecureInputMethodService : InputMethodService() {
      * bottomRow in buildLettersPage) - either way it switches to the
      * crypto page (showingCrypto = true) to display its result, so the
      * 🔓 shortcut is a genuine single tap: check clipboard + decrypt +
-     * show result, without detouring through the crypto menu first.
+     * show result, without detouring through the crypto menu first. The
+     * Argon2id+AES work runs on cryptoExecutor - see sendSecureCompose's
+     * doc for why.
      */
     private fun decryptClipboard() {
+        if (cryptoBusy) return
         val passphrase = SessionKeyStore.get()
         if (passphrase == null) {
             android.widget.Toast.makeText(this, R.string.crypto_panel_no_session, android.widget.Toast.LENGTH_SHORT).show()
             return
         }
-        try {
-            val cm = getSystemService(CLIPBOARD_SERVICE) as? ClipboardManager
-            val clip = cm?.primaryClip
-            val clipText = if (clip != null && clip.itemCount > 0) clip.getItemAt(0).text?.toString() else null
-            if (clipText.isNullOrBlank() || !CryptoEngine.looksLikeCiphertext(clipText)) {
-                android.widget.Toast.makeText(this, R.string.crypto_panel_no_ciphertext_toast, android.widget.Toast.LENGTH_SHORT).show()
-                return
-            }
+        val cm = getSystemService(CLIPBOARD_SERVICE) as? ClipboardManager
+        val clip = cm?.primaryClip
+        val clipText = if (clip != null && clip.itemCount > 0) clip.getItemAt(0).text?.toString() else null
+        if (clipText.isNullOrBlank() || !CryptoEngine.looksLikeCiphertext(clipText)) {
+            java.util.Arrays.fill(passphrase, ' ')
+            android.widget.Toast.makeText(this, R.string.crypto_panel_no_ciphertext_toast, android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        cryptoBusy = true
+        android.widget.Toast.makeText(this, R.string.crypto_panel_decrypting_toast, android.widget.Toast.LENGTH_SHORT).show()
+        cryptoExecutor.execute {
+            var resultText: String? = null
+            var expired = false
             try {
                 val plainChars = CryptoEngine.decrypt(clipText, passphrase)
                 try {
-                    cryptoDecryptedText = String(plainChars)
+                    resultText = String(plainChars)
                 } finally {
                     java.util.Arrays.fill(plainChars, ' ')
                 }
-                showingCrypto = true
-                rebuildKeyboardView()
             } catch (e: CryptoEngine.ExpiredMessageException) {
-                android.widget.Toast.makeText(this, R.string.crypto_panel_expired_toast, android.widget.Toast.LENGTH_SHORT).show()
+                expired = true
             } catch (e: Exception) {
-                android.widget.Toast.makeText(this, R.string.crypto_panel_decrypt_failed_toast, android.widget.Toast.LENGTH_SHORT).show()
+                // falls through to the generic failure toast below
+            } finally {
+                java.util.Arrays.fill(passphrase, ' ')
             }
-        } finally {
-            java.util.Arrays.fill(passphrase, ' ')
+            mainHandler.post {
+                cryptoBusy = false
+                when {
+                    resultText != null -> {
+                        cryptoDecryptedText = resultText
+                        showingCrypto = true
+                        rebuildKeyboardView()
+                    }
+                    expired -> android.widget.Toast.makeText(this, R.string.crypto_panel_expired_toast, android.widget.Toast.LENGTH_SHORT).show()
+                    else -> android.widget.Toast.makeText(this, R.string.crypto_panel_decrypt_failed_toast, android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
 
@@ -1470,6 +1552,19 @@ class SecureInputMethodService : InputMethodService() {
         // Cancel any in-flight long-press/tatweel-repeat timer so it
         // can't fire against a key view that's about to be torn down.
         longPressHandler.removeCallbacksAndMessages(null)
+    }
+
+    /**
+     * Shuts down the background crypto thread (see cryptoExecutor above)
+     * when the whole service is torn down - e.g. the user switches to a
+     * different keyboard app entirely, not just hiding this one
+     * temporarily (that's onFinishInputView, which deliberately leaves
+     * the executor running so a job already in flight can still finish
+     * and post its result).
+     */
+    override fun onDestroy() {
+        super.onDestroy()
+        cryptoExecutor.shutdownNow()
     }
 
     /**
