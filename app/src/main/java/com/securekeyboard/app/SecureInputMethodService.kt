@@ -1098,7 +1098,7 @@ class SecureInputMethodService : InputMethodService() {
 
         lateinit var popup: PopupWindow
         val closeButton = TextView(this).apply {
-            text = getString(R.string.crypto_panel_close_btn)
+            this.text = getString(R.string.crypto_panel_close_btn)
             setTextColor(ThemeUtil.textOnAccentColor(this@SecureInputMethodService))
             setBackgroundColor(ThemeUtil.accentColor(this@SecureInputMethodService))
             gravity = Gravity.CENTER
