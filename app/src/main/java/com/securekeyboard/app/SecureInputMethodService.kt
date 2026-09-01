@@ -228,6 +228,15 @@ class SecureInputMethodService : InputMethodService() {
     // every single message, forcing them to re-open secure mode by hand
     // each time. See both callbacks below.
     private var secureComposeSticky = false
+    // Same idea as secureComposeSticky, for the crypto MENU page
+    // (buildCryptoPage) specifically: set while the user is on that
+    // page, so opening "نافذة تركيب منفصلة" (EncryptActivity as a real,
+    // separate Activity - see its EXTRA_POPUP_MODE doc) and coming back
+    // restores the menu they came from, instead of dropping to the
+    // plain letters page. Opening a full Activity like that necessarily
+    // fires this service's onFinishInputView/onStartInputView, same as
+    // switching apps would.
+    private var cryptoMenuSticky = false
     private var englishShiftOn = false
     // Message body while in secure-compose mode (see buildSecureComposePage
     // below) - deliberately NEVER passed to the InputConnection until the
@@ -301,6 +310,8 @@ class SecureInputMethodService : InputMethodService() {
     // part of any log, cleared alongside currentWord on field switch.
     private var lastFinishedWord: String? = null
     private var suggestionBar: LinearLayout? = null
+    // See onCreateInputView / showDecryptedResultPopup.
+    private var keyboardRootView: View? = null
 
     private fun dpToPx(dp: Float): Int =
         TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp, resources.displayMetrics).toInt()
@@ -365,6 +376,10 @@ class SecureInputMethodService : InputMethodService() {
         }
         suggestionBar = bar
         root.addView(bar)
+        // Anchor for showDecryptedResultPopup() below - a floating popup
+        // needs some attached View to anchor itself to; this is always
+        // the current keyboard root, whichever page happens to be on it.
+        keyboardRootView = root
 
         // ADDED - multi-page keyboard: dispatches to whichever page is
         // currently active (see letterMode/showingSymbols/showingEmoji
@@ -483,6 +498,7 @@ class SecureInputMethodService : InputMethodService() {
         })
         bottomRow.addView(makeKey("🔒", weight = 1.2f, heightDp = heightDp) {
             showingCrypto = true
+            cryptoMenuSticky = true
             rebuildKeyboardView()
         })
         // Direct one-tap shortcut: check the clipboard and decrypt right
@@ -669,6 +685,7 @@ class SecureInputMethodService : InputMethodService() {
         val backLabel = if (letterMode == LetterMode.ARABIC) "ابجد" else "ABC"
         bottomRow.addView(makeKey(backLabel, weight = 2f, heightDp = heightDp) {
             showingCrypto = false
+            cryptoMenuSticky = false
             rebuildKeyboardView()
         })
         root.addView(bottomRow)
@@ -764,7 +781,7 @@ class SecureInputMethodService : InputMethodService() {
             composeBuffer.append(' ')
             composePreviewView?.text = composeBuffer.toString()
         })
-        bottomRow.addView(makeKey("حذف", weight = 1.3f, heightDp = heightDp, accented = true) {
+        bottomRow.addView(makeKey("حذف", weight = 1.3f, heightDp = heightDp, accented = true, repeatable = true) {
             if (composeBuffer.isNotEmpty()) composeBuffer.deleteCharAt(composeBuffer.length - 1)
             composePreviewView?.text = composeBuffer.toString()
         })
@@ -972,18 +989,19 @@ class SecureInputMethodService : InputMethodService() {
      * Reads the system clipboard, and - only if it looks like something
      * this app itself produced (see CryptoEngine.looksLikeCiphertext) -
      * attempts to decrypt it with the active session passphrase. Shows
-     * the result inline in this same page (see cryptoDecryptedText
-     * above); never writes the decrypted text into any field, clipboard,
-     * or file.
+     * the result as a floating popup OVER whatever page is currently on
+     * screen (see showDecryptedResultPopup) - it does NOT navigate to a
+     * different keyboard page, so letters/symbols/emoji/secure-compose/
+     * crypto-menu, whichever was showing, is completely undisturbed
+     * underneath and still there the moment the popup is dismissed.
+     * Never writes the decrypted text into any field, clipboard, or file.
      *
      * Called both from the crypto panel's own "فك التشفير" button AND
      * directly from the main keyboard row's 🔓 shortcut key (see
-     * bottomRow in buildLettersPage) - either way it switches to the
-     * crypto page (showingCrypto = true) to display its result, so the
-     * 🔓 shortcut is a genuine single tap: check clipboard + decrypt +
-     * show result, without detouring through the crypto menu first. The
-     * Argon2id+AES work runs on cryptoExecutor - see sendSecureCompose's
-     * doc for why.
+     * bottomRow in buildLettersPage) - either way it's a genuine single
+     * tap: check clipboard + decrypt + show result, without detouring
+     * through the crypto menu first. The Argon2id+AES work runs on
+     * cryptoExecutor - see sendSecureCompose's doc for why.
      */
     private fun decryptClipboard() {
         if (cryptoBusy) return
@@ -1022,16 +1040,87 @@ class SecureInputMethodService : InputMethodService() {
             mainHandler.post {
                 cryptoBusy = false
                 when {
-                    resultText != null -> {
-                        cryptoDecryptedText = resultText
-                        showingCrypto = true
-                        rebuildKeyboardView()
-                    }
+                    resultText != null -> showDecryptedResultPopup(resultText!!)
                     expired -> android.widget.Toast.makeText(this, R.string.crypto_panel_expired_toast, android.widget.Toast.LENGTH_SHORT).show()
                     else -> android.widget.Toast.makeText(this, R.string.crypto_panel_decrypt_failed_toast, android.widget.Toast.LENGTH_SHORT).show()
                 }
             }
         }
+    }
+
+    /**
+     * Shows decrypted plaintext as a small floating PopupWindow anchored
+     * over whatever keyboard page is currently on screen - the SAME
+     * pattern already used for the letter-variant popup (showVariantPopup
+     * above), just for reading text instead of picking a character. The
+     * page underneath (letters, symbols, secure-compose, crypto menu -
+     * whichever it was) is never rebuilt or navigated away from; it's
+     * simply covered for a moment and fully intact once this is
+     * dismissed, either by the close button or by tapping outside it.
+     * The text is read-only here on purpose - nothing decrypted this way
+     * is ever written into a field, the clipboard, or a file.
+     */
+    private fun showDecryptedResultPopup(text: String) {
+        val anchor = keyboardRootView ?: return
+        val padding = dpToPx(12f)
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = ThemeUtil.keyBackgroundSelector(this@SecureInputMethodService, accented = false)
+            elevation = dpToPx(8f).toFloat()
+            setPadding(padding, padding, padding, padding)
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+        }
+
+        val titleView = TextView(this).apply {
+            text = getString(R.string.crypto_panel_decrypted_title)
+            setTextColor(ThemeUtil.accentColor(this@SecureInputMethodService))
+            textSize = 13f
+            textDirection = View.TEXT_DIRECTION_RTL
+            setPadding(0, 0, 0, dpToPx(6f))
+        }
+        container.addView(titleView)
+
+        val scroll = ScrollView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                dpToPx(260f),
+                dpToPx(130f)
+            )
+        }
+        val textView = TextView(this).apply {
+            this.text = text
+            setTextColor(Color.WHITE)
+            textSize = 15f
+            textDirection = View.TEXT_DIRECTION_RTL
+        }
+        scroll.addView(textView)
+        container.addView(scroll)
+
+        lateinit var popup: PopupWindow
+        val closeButton = TextView(this).apply {
+            text = getString(R.string.crypto_panel_close_btn)
+            setTextColor(ThemeUtil.textOnAccentColor(this@SecureInputMethodService))
+            setBackgroundColor(ThemeUtil.accentColor(this@SecureInputMethodService))
+            gravity = Gravity.CENTER
+            textSize = 14f
+            setPadding(0, dpToPx(10f), 0, dpToPx(10f))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dpToPx(8f) }
+            setOnClickListener { popup.dismiss() }
+        }
+        container.addView(closeButton)
+
+        popup = PopupWindow(
+            container,
+            dpToPx(280f),
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            true
+        )
+        popup.isOutsideTouchable = true
+        popup.elevation = dpToPx(8f).toFloat()
+        popup.showAtLocation(anchor, Gravity.CENTER, 0, 0)
     }
 
     /**
@@ -1454,26 +1543,37 @@ class SecureInputMethodService : InputMethodService() {
         // same as a real keyboard remembering the language you were
         // just using.
         //
-        // Secure-compose mode is the one exception: while
-        // secureComposeSticky is set, it survives this reset instead of
-        // silently dropping back to the normal keyboard. Without this,
-        // tapping the target app's own send button - which can drop and
-        // re-grant this keyboard's input focus - would exit secure mode
-        // on every single message, forcing the user to navigate back
-        // into it by hand each time. Only the explicit "رجوع" button on
-        // that screen (see clearSecureCompose()) turns stickiness off.
+        // Secure-compose mode, and the crypto MENU page, are the two
+        // exceptions: while secureComposeSticky/cryptoMenuSticky is set,
+        // they survive this reset instead of silently dropping back to
+        // the normal keyboard. Without this, tapping the target app's
+        // own send button - which can drop and re-grant this keyboard's
+        // input focus - would exit secure mode on every single message,
+        // and opening "نافذة تركيب منفصلة" (a real separate Activity,
+        // which drops focus the same way switching apps does) would
+        // dump the user on the plain letters page instead of the crypto
+        // menu they came from. Only the explicit "رجوع"/"ابجد" button on
+        // each respective screen turns its stickiness off.
         val cameFromOverlay = showingSymbols || showingEmoji || showingCrypto || showingSecureCompose
         showingSymbols = false
         showingEmoji = false
-        showingCrypto = false
         // Sensitive plaintext from a previous decrypt never survives a
         // refocus, sticky or not - only the compose screen itself does.
         cryptoDecryptedText = null
-        if (secureComposeSticky) {
-            showingSecureCompose = true
-            composePreviewView = null
-        } else {
-            clearSecureCompose()
+        when {
+            secureComposeSticky -> {
+                showingSecureCompose = true
+                showingCrypto = false
+                composePreviewView = null
+            }
+            cryptoMenuSticky -> {
+                showingCrypto = true
+                clearSecureCompose()
+            }
+            else -> {
+                showingCrypto = false
+                clearSecureCompose()
+            }
         }
 
         // Suggestions are opt-OUT per field, driven entirely by what the
@@ -1538,6 +1638,10 @@ class SecureInputMethodService : InputMethodService() {
         currentWord.clear()
         lastFinishedWord = null
         cryptoDecryptedText = null
+        // Safe to unconditionally drop here even with cryptoMenuSticky
+        // set - onStartInputView is what actually decides whether to
+        // restore the crypto menu on the next focus, based on that flag,
+        // not whatever this flag happens to be while the view is hidden.
         showingCrypto = false
         // See the matching comment in onStartInputView: while
         // secureComposeSticky is set, secure-compose mode survives this
