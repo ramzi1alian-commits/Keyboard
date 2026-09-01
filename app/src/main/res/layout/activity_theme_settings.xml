@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/navy_950">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="24dp"
+            android:text="@string/settings_title"
+            android:textColor="@color/white"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="10dp"
+            android:text="@string/theme_color_label"
+            android:textColor="@color/slate_200"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <GridLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:columnCount="2"
+            android:layout_marginBottom="24dp">
+
+            <LinearLayout android:id="@+id/swatchCyan" style="@style/SwatchCard" android:layout_row="0" android:layout_column="0">
+                <View style="@style/SwatchDot" android:background="@drawable/dot_cyan" />
+                <TextView style="@style/SwatchLabel" android:text="@string/color_cyan" />
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/swatchTeal" style="@style/SwatchCard" android:layout_row="0" android:layout_column="1">
+                <View style="@style/SwatchDot" android:background="@drawable/dot_teal" />
+                <TextView style="@style/SwatchLabel" android:text="@string/color_teal" />
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/swatchGold" style="@style/SwatchCard" android:layout_row="1" android:layout_column="0">
+                <View style="@style/SwatchDot" android:background="@drawable/dot_gold" />
+                <TextView style="@style/SwatchLabel" android:text="@string/color_gold" />
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/swatchPurple" style="@style/SwatchCard" android:layout_row="1" android:layout_column="1">
+                <View style="@style/SwatchDot" android:background="@drawable/dot_purple" />
+                <TextView style="@style/SwatchLabel" android:text="@string/color_purple" />
+            </LinearLayout>
+        </GridLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="10dp"
+            android:text="@string/display_mode_label"
+            android:textColor="@color/slate_200"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="24dp">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnDayMode"
+                style="@style/SecondaryButton"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:text="@string/mode_day" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnNightMode"
+                style="@style/SecondaryButton"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:text="@string/mode_night" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="10dp"
+            android:text="@string/font_label"
+            android:textColor="@color/slate_200"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="24dp">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnFontSans"
+                style="@style/SecondaryButton"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="6dp"
+                android:text="@string/font_sans" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnFontSerif"
+                style="@style/SecondaryButton"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_weight="1"
+                android:layout_marginHorizontal="6dp"
+                android:text="@string/font_serif" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnFontMono"
+                style="@style/SecondaryButton"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_weight="1"
+                android:layout_marginStart="6dp"
+                android:text="@string/font_mono" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="10dp"
+            android:text="@string/density_label"
+            android:textColor="@color/slate_200"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnCompact"
+                style="@style/SecondaryButton"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:text="@string/density_compact" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnComfortable"
+                style="@style/SecondaryButton"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:text="@string/density_comfortable" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp"
+            android:text="@string/keyboard_height_label"
+            android:textColor="@color/slate_200"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/textKeyboardHeightValue"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:textColor="@color/slate_400"
+            android:textSize="12sp" />
+
+        <SeekBar
+            android:id="@+id/seekKeyboardHeight"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:max="32" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_input"
+            android:padding="14dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="24dp">
+
+            <TextView
+                android:id="@+id/previewKeyA"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="6dp"
+                android:gravity="center"
+                android:text="أ"
+                android:textColor="@color/slate_200"
+                android:textSize="18sp" />
+
+            <TextView
+                android:id="@+id/previewKeyB"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1.5"
+                android:layout_marginStart="6dp"
+                android:gravity="center"
+                android:text="مسافة"
+                android:textColor="@color/accent_cyan"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/settings_note"
+            android:textColor="@color/slate_400"
+            android:textSize="12sp"
+            android:lineSpacingExtra="4dp" />
+
+    </LinearLayout>
+</ScrollView>

@@ -1,0 +1,83 @@
+<resources>
+    <style name="AppTheme" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:windowNoTitle">true</item>
+        <item name="colorPrimary">@color/navy_900</item>
+        <item name="colorPrimaryDark">@color/navy_950</item>
+        <item name="colorAccent">@color/accent_cyan</item>
+        <item name="android:windowBackground">@color/navy_950</item>
+        <item name="android:statusBarColor">@color/navy_950</item>
+    </style>
+
+    <style name="AppTheme.PopupCompose" parent="Theme.MaterialComponents.DayNight.Dialog">
+        <item name="android:windowNoTitle">true</item>
+        <item name="colorPrimary">@color/navy_900</item>
+        <item name="colorPrimaryDark">@color/navy_950</item>
+        <item name="colorAccent">@color/accent_cyan</item>
+        <item name="android:windowBackground">@color/navy_950</item>
+        <!-- Genuinely floats above whatever was behind it (e.g. WhatsApp)
+             instead of taking over the full screen, and dims the
+             background so it visually reads as a popup, not a page
+             navigation - this is what "التركيب الآمن" from the
+             keyboard's crypto panel opens. -->
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:windowMinWidthMajor">88%</item>
+        <item name="android:windowMinWidthMinor">88%</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:backgroundDimAmount">0.6</item>
+    </style>
+
+    <style name="CardStyle">
+        <item name="android:background">@drawable/bg_card</item>
+        <item name="android:padding">20dp</item>
+    </style>
+
+    <style name="PrimaryButton" parent="Widget.MaterialComponents.Button">
+        <item name="backgroundTint">@color/accent_cyan</item>
+        <item name="android:textColor">@color/text_on_accent</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textSize">15sp</item>
+        <item name="cornerRadius">12dp</item>
+    </style>
+
+    <style name="SecondaryButton" parent="Widget.MaterialComponents.Button.OutlinedButton">
+        <item name="strokeColor">@color/navy_700</item>
+        <item name="android:textColor">@color/slate_200</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textSize">15sp</item>
+        <item name="cornerRadius">12dp</item>
+    </style>
+
+    <style name="InputField">
+        <item name="android:background">@drawable/bg_input</item>
+        <item name="android:padding">14dp</item>
+        <item name="android:textColor">@color/slate_200</item>
+        <item name="android:textColorHint">@color/slate_400</item>
+        <item name="android:textSize">15sp</item>
+    </style>
+
+    <style name="SwatchCard">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_margin">6dp</item>
+        <item name="android:layout_columnWeight">1</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:background">@drawable/bg_input</item>
+        <item name="android:padding">14dp</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
+
+    <style name="SwatchDot">
+        <item name="android:layout_width">22dp</item>
+        <item name="android:layout_height">22dp</item>
+        <item name="android:layout_marginEnd">10dp</item>
+    </style>
+
+    <style name="SwatchLabel">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">@color/slate_200</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+</resources>

@@ -1,0 +1,27 @@
+<resources>
+    <!--
+        NIGHT (dark-mode) palette - merged pass. Deep near-black background
+        (kept from the neon-accent pass, which correctly identified that
+        the old #0B1120 background didn't give cards enough contrast to
+        stand out), paired with the pulled-back (not neon) accent set
+        defined in values/colors.xml.
+
+        CONTRAST PASS (this version): the previous values here
+        (navy_950 #0A0D14, navy_900 #12161F, navy_800 #1A2029, navy_700
+        #2B3547) were all within a few percent lightness of each other -
+        technically dark, but visually flat/hazy, like the keyboard
+        surface, key faces, and key borders were all the same dark gray
+        with a filter over it. No shapes, radii, or elevation changed
+        here - only the color VALUES, spread further apart so the raised
+        key cards (real View.elevation, see ThemeUtil.KEY_ELEVATION_DP)
+        actually read as distinct surfaces sitting on a genuinely darker
+        background, and text reads crisp white instead of a dim off-white.
+    -->
+    <color name="navy_950">#050709</color>
+    <color name="navy_900">#1C2430</color>
+    <color name="navy_800">#262F3D</color>
+    <color name="navy_700">#3C4759</color>
+    <color name="slate_400">#9FB0C7</color>
+    <color name="slate_200">#FFFFFF</color>
+    <color name="white">#FFFFFF</color>
+</resources>

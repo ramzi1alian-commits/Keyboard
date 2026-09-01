@@ -1,0 +1,132 @@
+<resources>
+    <!-- الاسم اتغيّر (وكمان الـ applicationId في build.gradle) عشان
+         النسخة دي تتثبت بجانب أي نسخة قديمة من التطبيق، مش تستبدلها. -->
+    <string name="app_name">كيبورد آمن برو</string>
+    <string name="keyboard_name">كيبورد آمن برو</string>
+    <string name="app_tagline">كيبورد وتشفير محلي، بدون إنترنت نهائيا</string>
+
+    <string name="setup_title">إعداد الكيبورد</string>
+    <string name="setup_explainer">هذه الكيبورد لا يملك صلاحية الوصول للإنترنت إطلاقا، ولا يخزن أو يسجل أي شيء تكتبه، ويمنع لقطات الشاشة أثناء استخدامه.</string>
+    <string name="enable_keyboard">تفعيل الكيبورد من الإعدادات</string>
+    <string name="switch_keyboard">تبديل الكيبورد الحالي</string>
+
+    <string name="encrypt_card_desc">شفّر أي نص بمفتاح تحدده أنت، جهازك بدون اتصال بالإنترنت.</string>
+    <string name="open_encrypt_tool">فتح أداة التشفير</string>
+
+    <string name="encrypt_title">تشفير وفك تشفير</string>
+    <string name="encrypt_subtitle">تشفير AES-256 محلي بالكامل على جهازك</string>
+    <string name="text_label">النص</string>
+    <string name="text_hint">اكتب النص هنا</string>
+    <string name="key_label">المفتاح</string>
+    <string name="key_hint">اكتب مفتاح قوي</string>
+    <string name="generate_key_btn">توليد مفتاح عشوائي قوي</string>
+    <string name="warn_write_down_key">مفتاح عشوائي حقيقي (مش مشتق من أي كلمة). انسخه أو اكتبه في مكان منفصل عن النص المشفر - متسيبهوش مخزّن جنبه.</string>
+    <string name="err_weak_key">المفتاح ده ضعيف (~%1$d بت، المطلوب %2$d بت على الأقل). استخدم زرار "توليد مفتاح عشوائي قوي" أو مفتاح أطول وأكثر تنوعا.</string>
+    <string name="key_strength_ok">قوة تقديرية: ~%1$d بت (يفي بالحد الأدنى)</string>
+    <string name="key_strength_weak">قوة تقديرية: ~%1$d بت (المطلوب %2$d بت على الأقل)</string>
+    <string name="encrypt_btn">تشفير</string>
+    <string name="decrypt_btn">فك التشفير</string>
+    <string name="result_label">الناتج</string>
+    <string name="copy_result_btn">نسخ الناتج</string>
+    <string name="clear_all_btn">مسح كل الحقول والحافظة</string>
+    <string name="clipboard_autoclear_notice">تم النسخ - هيتم مسح الحافظة تلقائيا خلال 30 ثانية</string>
+    <string name="clipboard_cleared_notice">تم مسح الحافظة</string>
+
+    <string name="err_no_text">اكتب نص أولا</string>
+    <string name="err_no_cipher">حط النص المشفر أولا</string>
+    <string name="err_no_key">اكتب مفتاح أولا</string>
+    <string name="err_bad_key">المفتاح غلط أو النص غير سليم</string>
+    <string name="err_generic">حصل خطأ أثناء التشفير</string>
+    <string name="err_expired">انتهت صلاحية هذه الرسالة - لم يعد بالإمكان فك تشفيرها (بواسطة هذا التطبيق).</string>
+
+    <string name="expiry_label">مدة صلاحية الرسالة (اختياري)</string>
+    <string-array name="expiry_options">
+        <item>بدون انتهاء</item>
+        <item>دقيقتين</item>
+        <item>5 دقائق</item>
+        <item>15 دقيقة</item>
+        <item>ساعة</item>
+        <item>مخصص (بالدقائق)</item>
+    </string-array>
+    <string name="expiry_custom_hint">عدد الدقائق</string>
+    <string name="expiry_warning_note">ملحوظة مهمة: التطبيق ده شغال بدون إنترنت بالكامل، فمفيش خادم يقدر يمسح المفتاح فعليا بعد الوقت. الخيار ده بيخلي التطبيق نفسه بس يرفض فك التشفير بعد الوقت المحدد (وبيكتشف أي تلاعب في وقت الانتهاء)، لكنه مش ضمان مطلق: أي حد معاه المفتاح والنص المشفر يقدر يفك تشفيره بأداة تانية حتى بعد ما "تنتهي" صلاحيته. اعتبرها حماية ضد فك التشفير العرضي بعد فترة، مش قفل غير قابل للكسر رياضيا.</string>
+
+    <string name="warn_root_detected">تنبيه: في مؤشرات على إن الجهاز ده معمول له Root (أو نسخة نظام غير رسمية). ده مش قرار نهائي (ممكن يكون خطأ)، لكن معناه الحماية اللي بيوفرها التطبيق (منع اللقطة، تصفير الذاكرة) مش مضمونة على النظام ده، لأن نظام معدّل يقدر يتخطاها. لأي استخدام حساس فعلا، استخدم جهاز غير معدّل.</string>
+
+    <string name="settings_title">الإعدادات والمظهر</string>
+    <string name="theme_color_label">لون الهوية البصرية</string>
+    <string name="color_cyan">سماوي</string>
+    <string name="color_teal">أخضر مزرق</string>
+    <string name="color_gold">ذهبي</string>
+    <string name="color_purple">بنفسجي</string>
+    <string name="display_mode_label">وضع العرض</string>
+    <string name="mode_day">نهاري</string>
+    <string name="mode_night">ليلي</string>
+    <string name="font_label">الخط</string>
+    <string name="font_sans">افتراضي</string>
+    <string name="font_serif">كلاسيكي</string>
+    <string name="font_mono">مسطر</string>
+    <string name="density_label">كثافة العرض</string>
+    <string name="density_compact">مضغوط</string>
+    <string name="density_comfortable">مريح</string>
+    <string name="keyboard_height_label">ارتفاع مفاتيح الكيبورد</string>
+    <string name="keyboard_height_value">الارتفاع الحالي: %1$d (معاينة تحت)</string>
+    <string name="settings_note">التغييرات بتتطبق على شاشات التطبيق فورا. ارتفاع الكيبورد بيتطبق فعليا في المرة الجاية اللي تفتح فيها الكيبورد. كل الإعدادات محفوظة محليا على جهازك فقط.</string>
+    <string name="open_theme_settings">الإعدادات والمظهر</string>
+
+    <string name="learned_words_title">الكلمات المتعلَّمة</string>
+    <string name="learned_words_desc">في أي حقل غير حساس (خارج شاشة التشفير)، الكيبورد بيحفظ الكلمات اللي بتكتبها بشكل متكرر على جهازك فقط (بدون إنترنت نهائيا) عشان يقترحها لك بشكل أدق. كلمات مفردة بس مع عدد مرات الاستخدام - مش جملة ولا نص كامل. تقدر تمسح كل ده في أي وقت.</string>
+    <string name="clear_learned_btn">مسح الكلمات المتعلَّمة</string>
+    <string name="learned_cleared_toast">تم مسح كل الكلمات المتعلَّمة</string>
+
+    <string name="learned_phrases_title">الجمل المحفوظة</string>
+    <string name="learned_phrases_desc">في أي حقل غير حساس، لما تخلّص سطر كامل وتضغط \"إدخال\"، الكيبورد بيحفظ الجملة دي على جهازك فقط (بدون إنترنت) عشان يقترحها عليك كاملة تاني في المرة الجاية. الجملة لازم تكون كلمتين على الأقل، والجمل الطويلة جدا متتحفظش. ده تخزين حقيقي لأجزاء مما تكتبه فعليا - أكتر من مجرد كلمات مفردة - وتقدر تمسحه في أي وقت منفصل عن الكلمات المتعلَّمة.</string>
+    <string name="clear_phrases_btn">مسح الجمل المحفوظة</string>
+    <string name="phrases_cleared_toast">تم مسح كل الجمل المحفوظة</string>
+
+    <string name="autocorrect_title">التصحيح التلقائي</string>
+    <string name="autocorrect_desc">يستبدل عدد محدود من الأخطاء الإملائية الشائعة (عربي وإنجليزي) تلقائيا عند إنهاء الكلمة - قائمة ثابتة داخل التطبيق، مش نموذج بيتعلم من كتابتك. مطفأ افتراضيا.</string>
+    <string name="autocorrect_switch_label">تفعيل التصحيح التلقائي</string>
+
+    <string name="backup_title">نسخ احتياطي للقاموس المتعلَّم</string>
+    <string name="backup_desc">صدّر الكلمات اللي اتعلمها الكيبورد منك كملف نصي تختار مكانه بنفسك، أو استورد ملف سابق لدمجه مع القاموس الحالي - يفيد عند تغيير الجهاز أو إعادة التثبيت. التطبيق برضه بدون إنترنت هنا، الملف بيتحفظ فين ما تختار أنت بس.</string>
+    <string name="export_learned_btn">تصدير القاموس المتعلَّم</string>
+    <string name="import_learned_btn">استيراد قاموس محفوظ</string>
+    <string name="export_success_toast">تم حفظ الملف</string>
+    <string name="export_fail_toast">تعذّر حفظ الملف</string>
+    <string name="import_success_toast">تم استيراد %1$d كلمة</string>
+    <string name="import_fail_toast">تعذّر قراءة الملف أو كان فارغا</string>
+
+    <string name="about_btn">عن التطبيق والخصوصية</string>
+    <string name="about_title">عن التطبيق والخصوصية</string>
+    <string name="about_section_internet_title">بدون إنترنت نهائيا</string>
+    <string name="about_section_internet_body">هذا التطبيق لا يطلب صلاحية الإنترنت إطلاقا، وده قرار على مستوى النظام مش مجرد وعد في الكود - يعني حتى لو حصل خطأ برمجي، جهازك نفسه بيمنع أي اتصال. مفيش خادم، مفيش تحليلات، مفيش إعلانات.</string>
+    <string name="about_section_dictionaries_title">كيف بيقترح الكلمات</string>
+    <string name="about_section_dictionaries_body">فيه نوعين من الاقتراحات: قاموس ثابت مبني من نصوص عربية عامة (مش بياناتك)، وقاموس شخصي بيتعلم من الكلمات اللي بتكتبها فعلا على جهازك بس. الاتنين بيشتغلوا بدون إرسال أي حاجة لأي مكان.</string>
+    <string name="about_section_sensitive_title">الحقول الحساسة محمية بشكل أقوى</string>
+    <string name="about_section_sensitive_body">في حقول كلمة المرور، أو أي حقل يطلب صراحة عدم الاقتراحات (زي شاشة التشفير بتاعة التطبيق نفسه)، بيتوقف الاقتراح والتعلّم تماما - مفيش أي كلمة من الحقل ده بتتحفظ في أي قاموس.</string>
+    <string name="about_section_control_title">التحكم كامل في إيدك</string>
+    <string name="about_section_control_body">تقدر تمسح القاموس الشخصي أو الجمل المحفوظة في أي وقت من الإعدادات، وتقدر كمان تصدّرهم لملف تحتفظ بيه بنفسك أو تستوردهم على جهاز تاني - بدون أي تدخل من التطبيق في إن الملف ده يروح فين.</string>
+
+    <string name="use_as_session_key_btn">استخدم كمفتاح جلسة (٣٠ دقيقة)</string>
+    <string name="session_key_inactive">لا يوجد مفتاح جلسة نشط حاليا. لما تفعّله، هتقدر تشفّر وتفك التشفير من داخل الكيبورد نفسه بدون ما تفتح هذه الشاشة كل مرة.</string>
+    <string name="session_key_active">مفتاح الجلسة نشط - متبقي %1$d دقيقة تقريبا. محفوظ في ذاكرة الجهاز المؤقتة فقط، مش على القرص.</string>
+    <string name="session_key_set_toast">تم تفعيل مفتاح الجلسة لمدة %1$d دقيقة</string>
+    <string name="session_key_cleared_toast">تم مسح مفتاح الجلسة</string>
+
+    <string name="crypto_panel_title">التشفير السريع</string>
+    <string name="crypto_panel_no_session">فعّل مفتاح جلسة أولا من شاشة التشفير الكاملة</string>
+    <string name="crypto_panel_encrypt_btn">شفّر النص الحالي واحقنه</string>
+    <string name="crypto_panel_decrypt_btn">افحص الحافظة وفك التشفير</string>
+    <string name="crypto_panel_empty_field_toast">الحقل فارغ، مفيش نص تشفّره</string>
+    <string name="crypto_panel_no_ciphertext_toast">مفيش رسالة مشفرة في الحافظة</string>
+    <string name="crypto_panel_decrypt_failed_toast">تعذّر فك التشفير - المفتاح غلط أو الرسالة تالفة</string>
+    <string name="crypto_panel_expired_toast">هذه الرسالة منتهية الصلاحية</string>
+    <string name="crypto_panel_decrypted_title">النص بعد فك التشفير</string>
+    <string name="crypto_panel_close_btn">إغلاق</string>
+    <string name="crypto_panel_open_popup_btn">نافذة تركيب منفصلة (أأمن، بدون كتابة داخل واتساب)</string>
+    <string name="crypto_panel_popup_desc">الخيار الأول فوق بيكتب النص المشفر مباشرة في حقل واتساب. الخيار ده بيفتح نافذة منفصلة تكتب فيها رسالتك، وميلمسش حقل واتساب إلا بالنص المشفر النهائي بعد النسخ واللصق يدويا.</string>
+    <string name="crypto_panel_secure_compose_btn">وضع الكتابة الآمنة (زر واحد، بدون لصق)</string>
+    <string name="crypto_panel_secure_compose_desc">أفضل خيار: بتكتب رسالتك جوه معاينة داخل الكيبورد نفسه - حقل واتساب مايشوفش ولا حرف صافي إطلاقا. بمجرد ما تدوس "إرسال"، النص المشفر بس هو اللي بيتحط في واتساب مباشرة.</string>
+    <string name="crypto_panel_send_btn">🔒 إرسال</string>
+</resources>
