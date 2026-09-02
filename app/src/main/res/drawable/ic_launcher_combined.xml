@@ -1,17 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- RECOLORED to match the warm-gold palette (see ic_launcher_background.xml / ic_launcher_foreground.xml). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <path android:fillColor="#CDEBFF" android:pathData="M0,0h108v108h-108z" />
+    <path android:fillColor="#EDE1BD" android:pathData="M0,0h108v108h-108z" />
 
-    <path android:fillColor="#00A0E8" android:pathData="M54,22 L80,32 L80,55 C80,71 69,83 54,88 C39,83 28,71 28,55 L28,32 Z" />
+    <path android:fillColor="#A67924" android:pathData="M54,22 L80,32 L80,55 C80,71 69,83 54,88 C39,83 28,71 28,55 L28,32 Z" />
     <path
         android:pathData="M54,22 L80,32 L80,55 C80,71 69,83 54,88 C39,83 28,71 28,55 L28,32 Z"
         android:fillColor="#00000000"
-        android:strokeColor="#D9F5FF"
+        android:strokeColor="#FBF0D9"
         android:strokeWidth="1.4" />
 
     <path
@@ -20,6 +21,6 @@
         android:strokeColor="#FFFFFF"
         android:strokeWidth="4.4" />
     <path android:fillColor="#FFFFFF" android:pathData="M45,52 h18 v16 h-18 z" />
-    <path android:fillColor="#003E7A" android:pathData="M54,57 m-3,0 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0" />
-    <path android:fillColor="#003E7A" android:pathData="M52.7,59 h2.6 v4 h-2.6 z" />
+    <path android:fillColor="#4A3410" android:pathData="M54,57 m-3,0 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0" />
+    <path android:fillColor="#4A3410" android:pathData="M52.7,59 h2.6 v4 h-2.6 z" />
 </vector>

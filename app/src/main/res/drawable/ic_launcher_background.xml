@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    FIXED: the previous gradient (#F3F9FF -> #DCEEFB) was almost
-    colorless - two barely-different near-whites, reading as flat/dusty
-    rather than a real gradient. This version keeps it light (still a
-    "light icon" as requested) but with a visibly deeper, more saturated
-    blue at the low end for real contrast/depth.
+    RECOLORED to match the app's actual in-app "warm gold" theme (see
+    values/colors.xml v5 - navy_950/navy_900 day palette, accent_gold).
+    The icon was still the OLD electric-blue branding from before that
+    palette change, so the home-screen icon and the keyboard's own
+    colors no longer matched at all. Same shield shape/composition,
+    just the cream-to-warm-tan gradient that's actually used inside
+    the app now.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
@@ -17,8 +19,8 @@
             <gradient
                 android:type="linear"
                 android:angle="135"
-                android:startColor="#EAF6FF"
-                android:endColor="#9FD8FF" />
+                android:startColor="#F5EEDA"
+                android:endColor="#D8C495" />
         </aapt:attr>
     </path>
 </vector>

@@ -374,6 +374,30 @@ object ThemeUtil {
         return states
     }
 
+    /**
+     * Background for the whole suggestion strip container: a slightly
+     * lighter, rounded card than the raw keyboard surface, so the strip
+     * reads as one distinct panel (rather than chips floating directly
+     * on the keyboard background) and has something solid to cast the
+     * shadow from [KEY_ELEVATION_DP]-style elevation onto.
+     */
+    fun suggestionBarBackground(context: Context): Drawable {
+        val ctx = themedContext(context)
+        val density = context.resources.displayMetrics.density
+        val bg = GradientDrawable()
+        bg.cornerRadius = (KEY_CORNER_RADIUS_DP + 2f) * density
+        bg.setColor(ContextCompat.getColor(ctx, R.color.navy_900))
+        return bg
+    }
+
+    /**
+     * Thin vertical rule dropped between (not around) suggestion chips,
+     * so a row of 3+ suggestions reads as clearly separated options
+     * instead of one run-on strip of text.
+     */
+    fun suggestionDividerColor(context: Context): Int =
+        ContextCompat.getColor(themedContext(context), R.color.navy_700)
+
     private fun pillShape(context: Context, pressed: Boolean): GradientDrawable {
         val ctx = themedContext(context)
         val density = context.resources.displayMetrics.density
@@ -385,10 +409,22 @@ object ThemeUtil {
         return bg
     }
 
-    /** Applies (or removes) the "pressed" elevation drop for tactile feedback on touch. */
+    /**
+     * Applies (or removes) the "pressed" elevation drop for tactile
+     * feedback on touch. Animated (short ObjectAnimator, not an instant
+     * jump) so the key visibly "settles" down and back up instead of
+     * snapping between the two elevations - a small touch, but it's
+     * what separates a raised card that feels alive from one that just
+     * flickers between two fixed heights.
+     */
     fun applyPressedElevation(view: android.view.View, pressed: Boolean) {
         val density = view.resources.displayMetrics.density
-        view.elevation = (if (pressed) KEY_ELEVATION_PRESSED_DP else KEY_ELEVATION_DP) * density
+        val target = (if (pressed) KEY_ELEVATION_PRESSED_DP else KEY_ELEVATION_DP) * density
+        view.animate().cancel()
+        view.animate()
+            .z(target)
+            .setDuration(if (pressed) 40L else 120L)
+            .start()
     }
 
     /** Flat, slightly darker fill for the whole keyboard surface so raised keys have contrast to sit on. */

@@ -167,6 +167,17 @@ class SecureInputMethodService : InputMethodService() {
         // How often a "repeatable" key (currently: backspace) re-fires
         // its action while held down, after the initial LONG_PRESS_MS.
         private const val KEY_REPEAT_MS = 60L
+        // Standard backspace/erase icon (U+232B), used instead of the
+        // Arabic word "حذف" so the key reads as a universal icon the
+        // way every other mainstream keyboard renders it. The word is
+        // kept as the key's accessibility label (see a11yLabel) so
+        // screen readers still announce "حذف", not the raw glyph.
+        private const val BACKSPACE_GLYPH = "⌫"
+        // Return/enter icon, replacing the word "إدخال" for the same
+        // reason as BACKSPACE_GLYPH above.
+        private const val ENTER_GLYPH = "↵"
+        // "Back/exit secure-compose" icon, replacing the word "رجوع".
+        private const val BACK_GLYPH = "⟵"
 
         // Keys that get a hamza-forms popup on long-press instead of the
         // tatweel-extend behavior. Order here is left-to-right in the
@@ -367,6 +378,13 @@ class SecureInputMethodService : InputMethodService() {
             // the layout at all times, so the key rows below it never
             // shift up/down as suggestions come and go while typing.
             visibility = View.INVISIBLE
+            // Distinct rounded panel + a light shadow (real elevation,
+            // matching the same technique used for keys) so the whole
+            // suggestion strip reads as one raised card sitting above
+            // the keyboard surface, not chips floating with nothing
+            // behind them.
+            background = ThemeUtil.suggestionBarBackground(this@SecureInputMethodService)
+            elevation = dpToPx(1.5f).toFloat()
             val lp = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 dpToPx((heightDp * 0.72f))
@@ -769,7 +787,7 @@ class SecureInputMethodService : InputMethodService() {
         }
 
         val bottomRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        bottomRow.addView(makeKey("رجوع", weight = 1.3f, heightDp = heightDp) {
+        bottomRow.addView(makeKey(BACK_GLYPH, weight = 1.3f, heightDp = heightDp, a11yLabel = "رجوع", isIconGlyph = true) {
             // The ONLY action that leaves secure-compose mode. Leaving
             // without sending discards the draft entirely - no "save for
             // later", consistent with nothing here ever being written to
@@ -781,7 +799,7 @@ class SecureInputMethodService : InputMethodService() {
             composeBuffer.append(' ')
             composePreviewView?.text = composeBuffer.toString()
         })
-        bottomRow.addView(makeKey("حذف", weight = 1.3f, heightDp = heightDp, accented = true, repeatable = true) {
+        bottomRow.addView(makeKey(BACKSPACE_GLYPH, weight = 1.3f, heightDp = heightDp, accented = true, repeatable = true, a11yLabel = "حذف", isIconGlyph = true) {
             if (composeBuffer.isNotEmpty()) composeBuffer.deleteCharAt(composeBuffer.length - 1)
             composePreviewView?.text = composeBuffer.toString()
         })
@@ -1155,7 +1173,7 @@ class SecureInputMethodService : InputMethodService() {
         }
 
     private fun deleteKey(heightDp: Int, weight: Float = 1.5f) =
-        makeKey("حذف", weight = weight, heightDp = heightDp, accented = true, repeatable = true) {
+        makeKey(BACKSPACE_GLYPH, weight = weight, heightDp = heightDp, accented = true, repeatable = true, a11yLabel = "حذف", isIconGlyph = true) {
             currentInputConnection?.deleteSurroundingText(1, 0)
             // Was: just chop the last char off currentWord, which left
             // the buffer permanently empty (suggestions stuck off) the
@@ -1168,7 +1186,7 @@ class SecureInputMethodService : InputMethodService() {
         }
 
     private fun enterKey(heightDp: Int, weight: Float = 1.5f) =
-        makeKey("إدخال", weight = weight, heightDp = heightDp, accented = true) {
+        makeKey(ENTER_GLYPH, weight = weight, heightDp = heightDp, accented = true, a11yLabel = "إدخال", isIconGlyph = true) {
             val typedWord = currentWord.toString()
             val correction = if (suggestionsEnabled && Prefs.autocorrectEnabled(this)) {
                 Autocorrect.correct(typedWord)
@@ -1210,11 +1228,20 @@ class SecureInputMethodService : InputMethodService() {
         variants: List<String>? = null,
         tatweelExtend: Boolean = false,
         repeatable: Boolean = false,
+        // Set this when `label` is a glyph/icon (e.g. ⌫) rather than a
+        // real word, so screen readers still announce something
+        // meaningful instead of reading out the raw Unicode symbol.
+        a11yLabel: String? = null,
+        // Icon glyphs read visually "thinner" than letters at the same
+        // sp size, so icon keys get a slightly larger size by default -
+        // purely cosmetic, doesn't change hit target/layout weight.
+        isIconGlyph: Boolean = false,
         onClick: (() -> Unit)? = null
     ): TextView {
         return TextView(this).apply {
             text = label
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+            contentDescription = a11yLabel ?: label
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, if (isIconGlyph) 21f else 18f)
             gravity = Gravity.CENTER
             isAllCaps = false
             includeFontPadding = false
@@ -1243,6 +1270,10 @@ class SecureInputMethodService : InputMethodService() {
             ThemeUtil.applyPressedElevation(this, pressed = false)
             isClickable = true
             isFocusable = true
+            // Lets performHapticFeedback() below actually produce a
+            // vibration - some OEM skins otherwise suppress haptics on
+            // views that haven't explicitly opted in.
+            isHapticFeedbackEnabled = true
             // dp -> px conversion is what makes this consistent across
             // screen densities, instead of the old raw-pixel constant.
             val lp = LinearLayout.LayoutParams(0, dpToPx(heightDp.toFloat()), weight)
@@ -1271,6 +1302,11 @@ class SecureInputMethodService : InputMethodService() {
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
                         v.isPressed = true
+                        // Light tactile click on every key press, same
+                        // vibration Android's own keyboard/dialer keys
+                        // use - short, subtle, no custom vibration
+                        // pattern or permission needed.
+                        v.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
                         ThemeUtil.applyPressedElevation(v, pressed = true)
                         isTatweelRepeating = false
                         isKeyRepeating = false
@@ -1706,7 +1742,18 @@ class SecureInputMethodService : InputMethodService() {
         }
 
         val heightDp = Prefs.keyboardHeightDp(this)
-        for (suggestion in suggestions) {
+        for ((index, suggestion) in suggestions.withIndex()) {
+            if (index > 0) {
+                // Thin vertical rule BETWEEN chips only (never before the
+                // first or after the last), so 3+ suggestions read as
+                // clearly separated options instead of one run-on strip.
+                bar.addView(View(this).apply {
+                    setBackgroundColor(ThemeUtil.suggestionDividerColor(this@SecureInputMethodService))
+                    layoutParams = LinearLayout.LayoutParams(dpToPx(1f), dpToPx((heightDp * 0.72f) * 0.5f)).apply {
+                        gravity = Gravity.CENTER_VERTICAL
+                    }
+                })
+            }
             val chip = TextView(this).apply {
                 text = suggestion.display
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)

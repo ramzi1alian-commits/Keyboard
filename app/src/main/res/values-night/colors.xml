@@ -24,4 +24,15 @@
     <color name="slate_400">#9FB0C7</color>
     <color name="slate_200">#FFFFFF</color>
     <color name="white">#FFFFFF</color>
+
+    <!--
+        DESIGN IMPROVEMENT: accent_gold is the app-wide default accent
+        (see Prefs.ACCENT_GOLD), but the day-mode bronze (#A67924) reads
+        muddy/low-contrast against this palette's near-black background
+        (navy_950 #050709). Overridden here only for night mode with a
+        brighter, more luminous gold so the accent actually pops the way
+        it's meant to; the day-mode value in values/colors.xml (matched
+        to the user's reference screenshot) is untouched.
+    -->
+    <color name="accent_gold">#D9A440</color>
 </resources>
