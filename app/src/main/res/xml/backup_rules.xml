@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Pre-Android-12 (API < 31) Auto Backup rules: exclude everything. -->
-<full-backup-content>
-    <exclude domain="sharedpref" path="." />
-    <exclude domain="database" path="." />
-    <exclude domain="file" path="." />
-</full-backup-content>

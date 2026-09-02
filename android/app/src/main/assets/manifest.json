@@ -1,0 +1,25 @@
+{
+  "name": "مِرسال — تشفير آمن",
+  "short_name": "مِرسال",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#08070d",
+  "theme_color": "#0b0912",
+  "description": "أداة تشفير محلية باستخدام AES-256-GCM.",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
