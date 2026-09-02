@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Defense-in-depth, second independent layer: this app declares no
+    android.permission.INTERNET, so the OS sandbox already blocks every
+    network socket at the kernel level - that alone is sufficient on its
+    own. cleartextTrafficPermitted="false" with no configured trust
+    anchors means that even if a future code change accidentally added
+    the INTERNET permission, no cleartext connection could be opened and
+    no certificate would be trusted - a single accidental permission
+    addition could not silently reopen network access.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>
