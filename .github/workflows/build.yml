@@ -1,0 +1,78 @@
+name: بناء تطبيق أندرويد
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    # الأسرار بتتنسخ هنا لمتغيرات env على مستوى الـ job. السبب: GitHub
+    # Actions مايسمحش تستخدم "secrets.XXX" مباشرة جوه شرط "if:" (بيديك
+    # بالظبط الخطأ اللي ظهرلك: "Unrecognized named-value: 'secrets'").
+    # الطريقة الرسمية المعتمدة هي إنك تحط قيمة الـ secret في متغير env
+    # الأول، وبعدين تتحقق من متغير الـ env ده في الـ if - وده اللي
+    # بيحصل تحت.
+    env:
+      RELEASE_STORE_FILE_BASE64: ${{ secrets.RELEASE_STORE_FILE_BASE64 }}
+      RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+      RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+      RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+
+    steps:
+      - name: سحب الكود
+        uses: actions/checkout@v4
+
+      - name: تجهيز Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: تجهيز Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.4'
+
+      - name: بناء نسخة Debug من الـ APK (للتجربة السريعة فقط)
+        run: gradle assembleDebug
+
+      - name: رفع نسخة الـ Debug كملف قابل للتحميل
+        uses: actions/upload-artifact@v4
+        with:
+          name: secure-keyboard-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+
+      # ------------------------------------------------------------------
+      # نسخة Release موقّعة بمفتاحك الخاص - بتتفعّل تلقائيا فقط لو ضفت
+      # الأسرار (Secrets) الأربعة دي في إعدادات الـ repo (Settings >
+      # Secrets and variables > Actions):
+      #   RELEASE_STORE_FILE_BASE64  (ملف الـ keystore بتاعك مُرمّز Base64)
+      #   RELEASE_STORE_PASSWORD
+      #   RELEASE_KEY_ALIAS
+      #   RELEASE_KEY_PASSWORD
+      # من غيرهم الخطوات دي بتتخطى تلقائيا، ومفيش أي نسخة "Release"
+      # موقّعة بمفتاح عام بتتعمل - ده عمدا، عشان النسخة القديمة كانت
+      # بتوقّع نسخة الـ Debug بمفتاح Debug عام معروف، وأي حد يقدر يبني
+      # نسخة تشبهها بالظبط. لأي استخدام حقيقي، لازم Keystore خاص بيك إنت.
+      # ------------------------------------------------------------------
+      - name: فك تشفير الـ keystore الخاص بيك
+        if: ${{ env.RELEASE_STORE_FILE_BASE64 != '' }}
+        run: echo "$RELEASE_STORE_FILE_BASE64" | base64 -d > release.keystore
+
+      - name: بناء نسخة Release موقّعة بمفتاحك
+        if: ${{ env.RELEASE_STORE_FILE_BASE64 != '' }}
+        env:
+          RELEASE_STORE_FILE: release.keystore
+        run: gradle assembleRelease
+
+      - name: رفع نسخة الـ Release الموقّعة
+        if: ${{ env.RELEASE_STORE_FILE_BASE64 != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: secure-keyboard-release-apk
+          path: app/build/outputs/apk/release/app-release.apk
