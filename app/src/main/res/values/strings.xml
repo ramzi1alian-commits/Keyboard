@@ -159,4 +159,5 @@
     <string name="pairing_name_hint">اسم جهة الاتصال</string>
     <string name="pairing_name_required">أدخل اسم جهة الاتصال أولًا</string>
 
+    <string name="secure_file_receive_title">فك ملف SecureKeyboard</string>
 </resources>

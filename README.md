@@ -355,3 +355,10 @@ V14 standardizes the contact ECDH implementation across API 24-34. The device EC
 Because V14 creates a new device identity (`device_identity_v14.enc`), existing contact pairings from V13 must be paired again once after upgrading. The new identity is then stable across app restarts and is encrypted at rest.
 
 New message encryption uses a conservative Argon2id memory profile suitable for an IME process on Android 8-14; the selected memory cost is stored in the V3 ciphertext header, so decryption uses the exact parameters embedded in the message.
+
+## V15.1 — استقبال الملفات المشفرة
+- Added `SecureFileReceiveActivity` as the external receive/decrypt entry point for `.skf` files.
+- Encrypted files opened from WhatsApp/Files can be handed to SecureKeyboard through Android `VIEW`/`SEND` intents.
+- The receive screen requires the paired contact and an active session key, decrypts to a private temporary file, then lets the user choose a destination folder.
+- The original encrypted file is never modified and plaintext is not placed in the clipboard.
+- The receive activity uses `FLAG_SECURE` and only this dedicated handler is exported; the core keyboard and crypto screens remain private.

@@ -51,9 +51,46 @@
             android:label="@string/pairing_title" />
 
         <activity
+            android:name=".AttachmentPickerActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <activity
             android:name=".FileCryptoActivity"
             android:exported="false"
             android:label="@string/file_crypto_title" />
+
+        <!-- External receive entry point for SecureKeyboard encrypted files.
+             Only this small handler is exported; the keyboard and crypto screens remain private. -->
+        <activity
+            android:name=".SecureFileReceiveActivity"
+            android:exported="true"
+            android:label="@string/secure_file_receive_title"
+            android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" android:mimeType="application/octet-stream" />
+                <data android:scheme="content" android:pathPattern=".*\\.skf" />
+                <data android:scheme="file" android:pathPattern=".*\\.skf" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+        </activity>
 
         <activity
             android:name=".AboutActivity"

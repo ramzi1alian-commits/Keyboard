@@ -2,6 +2,12 @@ package com.securekeyboard.app
 
 import android.content.ClipboardManager
 import android.content.Intent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
+import android.net.Uri
+import android.view.inputmethod.InputConnection
+import android.view.inputmethod.InputContentInfo
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
@@ -241,6 +247,23 @@ class SecureInputMethodService : InputMethodService() {
     private var secureComposeSticky = false
     // Contact currently selected for secure compose. Null means no contact selected.
     private var selectedSecureContact: String? = null
+    // Selected attachment for secure-compose. The original URI is never modified;
+    // pressing the lock creates a separate encrypted outgoing copy and commits it
+    // to the focused chat app as content (WhatsApp can render it as an attachment).
+    private var selectedAttachmentUri: Uri? = null
+    private var selectedAttachmentName: String = ""
+    private var selectedAttachmentMime: String = "application/octet-stream"
+
+    private val attachmentReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != AttachmentPickerActivity.ACTION_ATTACHMENT_SELECTED) return
+            val uri = intent.getParcelableExtra<Uri>(AttachmentPickerActivity.EXTRA_URI) ?: return
+            selectedAttachmentUri = uri
+            selectedAttachmentName = intent.getStringExtra(AttachmentPickerActivity.EXTRA_NAME).orEmpty().ifBlank { "file" }
+            selectedAttachmentMime = intent.getStringExtra(AttachmentPickerActivity.EXTRA_MIME).orEmpty().ifBlank { "application/octet-stream" }
+            rebuildKeyboardView()
+        }
+    }
     private var contactPopup: PopupWindow? = null
     // Same idea as secureComposeSticky, for the crypto MENU page
     // (buildCryptoPage) specifically: set while the user is on that
@@ -300,6 +323,7 @@ class SecureInputMethodService : InputMethodService() {
     // Settings since the keyboard was last drawn" and rebuild live,
     // instead of requiring the user to restart the app for a height or
     // accent-color change to take effect.
+    private var attachmentReceiverRegistered = false
     private var appliedHeightDp = -1
     private var appliedAccentRes = -1
     // FIXED IN THIS VERSION: the keyboard's colors come from
@@ -336,6 +360,15 @@ class SecureInputMethodService : InputMethodService() {
 
     override fun onCreateInputView(): View {
         SessionKeyStore.initialize(this)
+        if (!attachmentReceiverRegistered) {
+            val filter = IntentFilter(AttachmentPickerActivity.ACTION_ATTACHMENT_SELECTED)
+            if (android.os.Build.VERSION.SDK_INT >= 33) {
+                registerReceiver(attachmentReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                registerReceiver(attachmentReceiver, filter)
+            }
+            attachmentReceiverRegistered = true
+        }
         // Block screenshots / screen recording of the keyboard surface,
         // to the extent the Android platform allows for an IME window.
         window?.window?.setFlags(
@@ -880,6 +913,18 @@ class SecureInputMethodService : InputMethodService() {
         }
         root.addView(previewScroll)
 
+        if (selectedAttachmentUri != null) {
+            val attachmentView = TextView(this).apply {
+                text = "📎 ${selectedAttachmentName.ifBlank { "ملف" }}\nسيُشفّر عند الضغط على 🔐 مع إبقاء الأصل كما هو"
+                setTextColor(ThemeUtil.accentColor(this@SecureInputMethodService))
+                textSize = 11f
+                gravity = Gravity.CENTER
+                setPadding(dpToPx(6f), dpToPx(4f), dpToPx(6f), dpToPx(4f))
+                setOnClickListener { selectedAttachmentUri = null; selectedAttachmentName = ""; rebuildKeyboardView() }
+            }
+            root.addView(attachmentView)
+        }
+
         // Encrypt/decrypt actions live right above the keys, always
         // visible and always reachable without leaving this screen.
         val actionRow = LinearLayout(this).apply {
@@ -887,7 +932,7 @@ class SecureInputMethodService : InputMethodService() {
             layoutDirection = View.LAYOUT_DIRECTION_LTR
         }
         actionRow.addView(makeKey("🔐", weight = 1f, heightDp = heightDp, accented = true, a11yLabel = "تشفير وإرسال") {
-            sendSecureCompose()
+            if (selectedAttachmentUri != null) sendSecureAttachment() else sendSecureCompose()
         })
         actionRow.addView(makeKey("🔓", weight = 1f, heightDp = heightDp, a11yLabel = "فك تشفير") {
             decryptClipboardInPlace()
@@ -895,8 +940,8 @@ class SecureInputMethodService : InputMethodService() {
         actionRow.addView(makeKey("👥", weight = 1f, heightDp = heightDp, accented = selectedSecureContact != null, a11yLabel = "جهات الاتصال الآمنة") {
             showSecureContactsPanel(root)
         })
-        actionRow.addView(makeKey("📎", weight = 1f, heightDp = heightDp, a11yLabel = "تشفير الملفات") {
-            openSecureFileCrypto()
+        actionRow.addView(makeKey("📎", weight = 1f, heightDp = heightDp, a11yLabel = "اختيار ملف") {
+            openAttachmentPicker()
         })
         root.addView(actionRow)
 
@@ -991,6 +1036,86 @@ class SecureInputMethodService : InputMethodService() {
      * CryptoEngine) runs on cryptoExecutor, not here - only the
      * InputConnection/UI touch-points below run on the main thread.
      */
+    private fun openAttachmentPicker() {
+        val intent = Intent(this, AttachmentPickerActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        startActivity(intent)
+    }
+
+    /** Encrypts the selected original into a separate outgoing SKF2 file and
+     * injects it into the focused app through InputConnection.commitContent().
+     * The source URI is read-only and is never overwritten or deleted. */
+    private fun sendSecureAttachment() {
+        if (cryptoBusy) return
+        val input = selectedAttachmentUri ?: return
+        val contactName = selectedSecureContact
+        if (contactName.isNullOrBlank()) {
+            android.widget.Toast.makeText(this, "اختر جهة اتصال آمنة أولاً", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        val passphrase = SessionKeyStore.get()
+        if (passphrase == null) {
+            android.widget.Toast.makeText(this, R.string.crypto_panel_no_session, android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        val keyB64 = ContactStore.getPairedContact(this, contactName)
+        if (keyB64.isNullOrBlank()) {
+            java.util.Arrays.fill(passphrase, ' ')
+            android.widget.Toast.makeText(this, "مفتاح جهة الاتصال غير موجود", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        val publicKey = try { DeviceIdentity.parseContactPublicKey(keyB64) } catch (e: Exception) {
+            java.util.Arrays.fill(passphrase, ' ')
+            android.widget.Toast.makeText(this, "مفتاح جهة الاتصال غير صالح", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        val mime = selectedAttachmentMime
+        val displayName = selectedAttachmentName.ifBlank { "file" }
+        cryptoBusy = true
+        android.widget.Toast.makeText(this, "جارٍ تشفير الملف وإرفاقه…", android.widget.Toast.LENGTH_SHORT).show()
+        cryptoExecutor.execute {
+            var outFile: java.io.File? = null
+            try {
+                val outDir = java.io.File(filesDir, "secure_outbox").apply { mkdirs() }
+                outFile = java.io.File(outDir, "out_${System.currentTimeMillis()}_${displayName.hashCode().toUInt().toString(16)}.skf")
+                val outUri = Uri.fromFile(outFile)
+                SecureFileCrypto.encrypt(this, input, outUri, publicKey, passphrase, displayName)
+                mainHandler.post {
+                    cryptoBusy = false
+                    val ic = currentInputConnection
+                    if (ic == null || android.os.Build.VERSION.SDK_INT < 25) {
+                        android.widget.Toast.makeText(this, "هذا التطبيق لا يدعم إرفاق الملفات من لوحة المفاتيح على هذا النظام", android.widget.Toast.LENGTH_LONG).show()
+                        return@post
+                    }
+                    try {
+                        val providerUri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.fileprovider", outFile!!)
+                        grantUriPermission(packageName, providerUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        val info = InputContentInfo(providerUri, android.content.ClipDescription(displayName, arrayOf(mime, "application/octet-stream")), null)
+                        val flags = InputConnection.INPUT_CONTENT_GRANT_READ_URI_PERMISSION
+                        val accepted = ic.commitContent(info, flags, null)
+                        if (!accepted) {
+                            android.widget.Toast.makeText(this, "واتساب/التطبيق المفتوح لم يقبل إرفاق الملف من لوحة المفاتيح", android.widget.Toast.LENGTH_LONG).show()
+                        } else {
+                            android.widget.Toast.makeText(this, "تم إرفاق الملف المشفّر — الأصل محفوظ", android.widget.Toast.LENGTH_SHORT).show()
+                            selectedAttachmentUri = null
+                            selectedAttachmentName = ""
+                            rebuildKeyboardView()
+                        }
+                    } catch (e: Exception) {
+                        android.widget.Toast.makeText(this, "تعذر إرفاق الملف المشفّر: ${e.message ?: "خطأ"}", android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+            } catch (e: Exception) {
+                outFile?.delete()
+                mainHandler.post {
+                    cryptoBusy = false
+                    android.widget.Toast.makeText(this, "فشل تشفير الملف: ${e.message ?: "خطأ غير معروف"}", android.widget.Toast.LENGTH_LONG).show()
+                }
+            } finally {
+                java.util.Arrays.fill(passphrase, ' ')
+            }
+        }
+    }
+
     private fun sendSecureCompose() {
         if (composeBuffer.isEmpty()) {
             android.widget.Toast.makeText(this, R.string.crypto_panel_empty_field_toast, android.widget.Toast.LENGTH_SHORT).show()
@@ -1925,6 +2050,10 @@ class SecureInputMethodService : InputMethodService() {
      * and post its result).
      */
     override fun onDestroy() {
+        if (attachmentReceiverRegistered) {
+            try { unregisterReceiver(attachmentReceiver) } catch (_: Exception) {}
+            attachmentReceiverRegistered = false
+        }
         contactPopup?.dismiss()
         mainHandler.removeCallbacks(suggestionUpdateRunnable)
         super.onDestroy()

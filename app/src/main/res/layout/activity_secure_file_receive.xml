@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🔐 ملف SecureKeyboard مستلم"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:paddingBottom="12dp" />
+
+        <TextView
+            android:id="@+id/receive_selected_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="ملف مشفر"
+            android:textSize="16sp"
+            android:padding="14dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="اختر جهة الاتصال التي استُخدمت لتشفير الملف. لا يتم فك الملف عبر الحافظة."
+            android:paddingTop="12dp"
+            android:paddingBottom="8dp" />
+
+        <Spinner
+            android:id="@+id/receive_contact_spinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:id="@+id/receive_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="جارٍ التحقق…"
+            android:paddingTop="18dp"
+            android:paddingBottom="18dp" />
+
+        <Button
+            android:id="@+id/receive_decrypt_btn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🔓 فك تشفير وحفظ الملف" />
+
+        <Button
+            android:id="@+id/receive_close_btn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="إغلاق"
+            android:layout_marginTop="8dp" />
+    </LinearLayout>
+</ScrollView>
