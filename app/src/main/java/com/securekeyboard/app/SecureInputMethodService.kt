@@ -1156,7 +1156,7 @@ class SecureInputMethodService : InputMethodService() {
             // WordDictionary. Only runs in non-sensitive fields, same
             // gate as everything else that touches currentWord's content.
             val correction = if (suggestionsEnabled && Prefs.autocorrectEnabled(this)) {
-                Autocorrect.correct(typedWord)
+                Autocorrect.correct(typedWord) ?: WordDictionary.bestCorrection(typedWord)
             } else null
             if (correction != null) {
                 currentInputConnection?.deleteSurroundingText(typedWord.length, 0)
@@ -1166,6 +1166,17 @@ class SecureInputMethodService : InputMethodService() {
             val finishedWord = correction ?: typedWord
             if (suggestionsEnabled && finishedWord.isNotEmpty()) {
                 LearnedDictionary.learn(this@SecureInputMethodService, finishedWord)
+                // Learn the sentence-so-far at every space, not only on Enter.
+                // This is what allows phrases such as "السلام عليكم ورحمة الله
+                // وبركاته" to become predictive while the user is still typing.
+                val lineSoFar = currentInputConnection?.getTextBeforeCursor(500, 0)
+                    ?.toString()
+                    ?.substringAfterLast('\n')
+                    ?.trim()
+                    ?: ""
+                if (lineSoFar.isNotEmpty()) {
+                    PhraseDictionary.learn(this@SecureInputMethodService, lineSoFar)
+                }
             }
             lastFinishedWord = if (suggestionsEnabled && finishedWord.isNotEmpty()) finishedWord else null
             currentWord.clear()
@@ -1189,7 +1200,7 @@ class SecureInputMethodService : InputMethodService() {
         makeKey(ENTER_GLYPH, weight = weight, heightDp = heightDp, accented = true, a11yLabel = "إدخال", isIconGlyph = true) {
             val typedWord = currentWord.toString()
             val correction = if (suggestionsEnabled && Prefs.autocorrectEnabled(this)) {
-                Autocorrect.correct(typedWord)
+                Autocorrect.correct(typedWord) ?: WordDictionary.bestCorrection(typedWord)
             } else null
             val ic = currentInputConnection
             if (correction != null) {
@@ -1725,13 +1736,33 @@ class SecureInputMethodService : InputMethodService() {
         }
 
         val suggestions = if (currentWord.isEmpty()) {
-            // Nothing typed yet for the new word - if a word was just
-            // finished (space/enter/tap), offer likely NEXT words instead
-            // of leaving the bar empty. This is what makes the keyboard
-            // predict ahead rather than only completing what's typed.
-            lastFinishedWord?.let { prev ->
-                NextWordDictionary.suggestionsFor(prev).map { Suggestion(it, isPhrase = false) }
-            } ?: emptyList()
+            // At the start of a new word, prefer a saved phrase continuation
+            // based on the COMPLETE text before the cursor. This is more useful
+            // than looking only at the last word: "السلام عليكم " can now offer
+            // "ورحمة الله وبركاته" from the user's own learned phrases.
+            val context = currentInputConnection?.getTextBeforeCursor(500, 0)
+                ?.toString()
+                ?.substringAfterLast('\n')
+                ?.trim()
+                ?: ""
+            val phraseSuggestions = if (context.isNotEmpty()) {
+                (PhraseDictionary.suggestionsForContext(context, max = 2) +
+                    NextWordDictionary.phraseSuggestionsForContext(context, max = 2))
+                    .distinct()
+                    .take(2)
+                    .map { Suggestion(it, isPhrase = true) }
+            } else {
+                emptyList()
+            }
+            if (phraseSuggestions.isNotEmpty()) {
+                phraseSuggestions
+            } else {
+                // No learned phrase matches: fall back to the fixed next-word
+                // dictionary using the immediately preceding word.
+                lastFinishedWord?.let { prev ->
+                    NextWordDictionary.suggestionsFor(prev).map { Suggestion(it, isPhrase = false) }
+                } ?: emptyList()
+            }
         } else {
             mergedSuggestions(currentWord.toString())
         }

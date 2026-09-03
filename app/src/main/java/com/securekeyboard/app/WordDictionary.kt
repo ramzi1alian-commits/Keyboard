@@ -25,7 +25,7 @@ import java.io.InputStreamReader
  *
  * Source data: CAMeL Arabic Frequency Lists (Classical Arabic variety) as
  * a base, merged with word-frequency counts from a public Arabic news
- * corpus (~75K additional Arabic-script word types), so contemporary news
+ * corpus (a cleaned top-1,000,000 MSA frequency list supplied for this build), so contemporary news
  * vocabulary is covered alongside the classical base list. Words present
  * in both sources get a small confidence boost. Raw counts are rescaled
  * to a 1-255 popularity score (same convention Android's own AOSP
@@ -35,6 +35,7 @@ object WordDictionary {
 
     private const val ASSET_NAME = "ar_words.tsv"
     private const val MAX_SUGGESTIONS = 5
+    private const val MAX_CORRECTION_CANDIDATES = 12000
 
     // Bucketed by first character so a per-keystroke lookup only has to
     // scan words that could possibly match, instead of all ~40,000 every
@@ -106,5 +107,64 @@ object WordDictionary {
             }
         }
         return out
+    }
+
+    /** Returns true when the dictionary contains the exact word. */
+    fun contains(word: String): Boolean {
+        if (word.isEmpty()) return false
+        val map = buckets ?: return false
+        val bucket = map[word[0]] ?: return false
+        return bucket.any { it.first == word }
+    }
+
+    /**
+     * Conservative offline spelling correction. It is intentionally limited
+     * to one edit and the same first Arabic letter, so the million-word
+     * dictionary cannot aggressively rewrite intentional words. This runs
+     * only when a word is finished (on space/enter), never on every keypress.
+     */
+    fun bestCorrection(word: String): String? {
+        val candidate = word.trim()
+        if (candidate.length < 3 || contains(candidate)) return null
+        val map = buckets ?: return null
+        val bucket = map[candidate[0]] ?: return null
+        var best: String? = null
+        var bestFreq = -1
+        var checked = 0
+        for ((known, freq) in bucket) {
+            if (checked++ >= MAX_CORRECTION_CANDIDATES) break
+            if (kotlin.math.abs(known.length - candidate.length) > 1) continue
+            if (known.length < 3) continue
+            if (editDistanceAtMostOne(candidate, known)) {
+                if (freq > bestFreq) {
+                    best = known
+                    bestFreq = freq
+                }
+            }
+        }
+        return best
+    }
+
+    private fun editDistanceAtMostOne(a: String, b: String): Boolean {
+        if (a == b) return true
+        if (kotlin.math.abs(a.length - b.length) > 1) return false
+        var i = 0
+        var j = 0
+        var edits = 0
+        while (i < a.length && j < b.length) {
+            if (a[i] == b[j]) {
+                i++; j++
+            } else {
+                edits++
+                if (edits > 1) return false
+                when {
+                    a.length > b.length -> i++
+                    b.length > a.length -> j++
+                    else -> { i++; j++ }
+                }
+            }
+        }
+        if (i < a.length || j < b.length) edits++
+        return edits <= 1
     }
 }

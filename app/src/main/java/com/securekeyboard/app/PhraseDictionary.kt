@@ -50,6 +50,24 @@ object PhraseDictionary {
         persist(context.applicationContext)
     }
 
+    /**
+     * Returns the continuation of saved phrases after the supplied context.
+     * Example: saved "السلام عليكم ورحمة الله وبركاته" + context
+     * "السلام عليكم" -> "ورحمة الله وبركاته".
+     */
+    fun suggestionsForContext(context: String, max: Int = 2): List<String> {
+        val normalized = context.trim()
+        if (normalized.isEmpty() || counts.isEmpty() || max <= 0) return emptyList()
+        val prefix = "$normalized "
+        return counts.entries.asSequence()
+            .filter { entry -> entry.key.startsWith(prefix) }
+            .sortedByDescending { it.value }
+            .take(max)
+            .map { it.key.substring(prefix.length).trim() }
+            .filter { it.isNotEmpty() }
+            .toList()
+    }
+
     fun suggestionsFor(prefix: String, max: Int = 2): List<String> {
         if (prefix.isEmpty() || counts.isEmpty() || max <= 0) return emptyList()
         return counts.entries.asSequence()
