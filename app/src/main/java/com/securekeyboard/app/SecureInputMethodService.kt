@@ -239,6 +239,9 @@ class SecureInputMethodService : InputMethodService() {
     // every single message, forcing them to re-open secure mode by hand
     // each time. See both callbacks below.
     private var secureComposeSticky = false
+    // Contact currently selected for secure compose. Null means no contact selected.
+    private var selectedSecureContact: String? = null
+    private var contactPopup: PopupWindow? = null
     // Same idea as secureComposeSticky, for the crypto MENU page
     // (buildCryptoPage) specifically: set while the user is on that
     // page, so opening "نافذة تركيب منفصلة" (EncryptActivity as a real,
@@ -663,7 +666,7 @@ class SecureInputMethodService : InputMethodService() {
 
         val composeDesc = TextView(this).apply {
             text = getString(R.string.crypto_panel_secure_compose_desc)
-            setTextColor(Color.parseColor("#94A3B8"))
+            setTextColor(ThemeUtil.textSecondaryColor(this@SecureInputMethodService))
             textSize = 11f
             setPadding(padding, 0, padding, dpToPx(4f))
             layoutDirection = View.LAYOUT_DIRECTION_RTL
@@ -695,7 +698,7 @@ class SecureInputMethodService : InputMethodService() {
 
         val popupDesc = TextView(this).apply {
             text = getString(R.string.crypto_panel_popup_desc)
-            setTextColor(Color.parseColor("#94A3B8"))
+            setTextColor(ThemeUtil.textSecondaryColor(this@SecureInputMethodService))
             textSize = 11f
             setPadding(padding, 0, padding, padding)
             layoutDirection = View.LAYOUT_DIRECTION_RTL
@@ -731,6 +734,106 @@ class SecureInputMethodService : InputMethodService() {
      * ever dropping back to the normal (non-secure) page in between
      * messages.
      */
+    /** Opens an in-keyboard side drawer with paired contacts. */
+    private fun showSecureContactsPanel(anchor: View) {
+        contactPopup?.dismiss()
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            setPadding(dpToPx(12f), dpToPx(12f), dpToPx(12f), dpToPx(12f))
+            background = ThemeUtil.keyboardBackground(this@SecureInputMethodService)
+            elevation = dpToPx(8f).toFloat()
+        }
+        val title = TextView(this).apply {
+            text = "جهات الاتصال الآمنة"
+            setTextColor(ThemeUtil.textColor(this@SecureInputMethodService))
+            textSize = 16f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(0, 0, 0, dpToPx(10f))
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        panel.addView(title, LinearLayout.LayoutParams(-1, dpToPx(42f)))
+
+        val names = ContactStore.listPairedContactNames(this)
+        if (names.isEmpty()) {
+            panel.addView(TextView(this).apply {
+                text = "لا توجد جهة اتصال مقترنة بعد"
+                setTextColor(ThemeUtil.textColor(this@SecureInputMethodService))
+                textSize = 13f
+                setPadding(0, dpToPx(8f), 0, dpToPx(12f))
+            })
+        } else {
+            for (name in names) {
+                val selected = name == selectedSecureContact
+                val row = TextView(this).apply {
+                    text = if (selected) "✓  🔐 $name" else "    🔐 $name"
+                    setTextColor(if (selected) ThemeUtil.accentColor(this@SecureInputMethodService) else ThemeUtil.textColor(this@SecureInputMethodService))
+                    textSize = 14f
+                    gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
+                    setPadding(dpToPx(10f), 0, dpToPx(10f), 0)
+                    background = ThemeUtil.keyBackgroundSelector(this@SecureInputMethodService, accented = selected)
+                    isClickable = true
+                    setOnClickListener {
+                        selectedSecureContact = name
+                        contactPopup?.dismiss()
+                        rebuildKeyboardView()
+                    }
+                }
+                val lp = LinearLayout.LayoutParams(-1, dpToPx(44f))
+                lp.setMargins(0, 0, 0, dpToPx(5f))
+                panel.addView(row, lp)
+            }
+        }
+
+        val add = TextView(this).apply {
+            text = "＋  إضافة جهة اتصال آمنة"
+            setTextColor(ThemeUtil.accentColor(this@SecureInputMethodService))
+            textSize = 13f
+            gravity = Gravity.CENTER
+            background = ThemeUtil.keyBackgroundSelector(this@SecureInputMethodService, accented = true)
+            isClickable = true
+            setOnClickListener {
+                contactPopup?.dismiss()
+                val intent = Intent(this@SecureInputMethodService, ContactPairingActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(intent)
+            }
+        }
+        panel.addView(add, LinearLayout.LayoutParams(-1, dpToPx(44f)))
+
+        val clear = TextView(this).apply {
+            text = "إلغاء اختيار الجهة"
+            setTextColor(ThemeUtil.textColor(this@SecureInputMethodService))
+            textSize = 12f
+            gravity = Gravity.CENTER
+            isClickable = true
+            setPadding(0, dpToPx(8f), 0, 0)
+            setOnClickListener {
+                selectedSecureContact = null
+                contactPopup?.dismiss()
+                rebuildKeyboardView()
+            }
+        }
+        panel.addView(clear, LinearLayout.LayoutParams(-1, dpToPx(36f)))
+
+        val width = dpToPx(285f)
+        val panelHeight = anchor.rootView.height.takeIf { it > dpToPx(120f) } ?: WindowManager.LayoutParams.WRAP_CONTENT
+        val popup = PopupWindow(panel, width, panelHeight, true).apply {
+            elevation = dpToPx(8f).toFloat()
+            setBackgroundDrawable(ThemeUtil.keyboardBackground(this@SecureInputMethodService))
+            isOutsideTouchable = true
+            setOnDismissListener { contactPopup = null }
+        }
+        contactPopup = popup
+        popup.showAtLocation(anchor, Gravity.RIGHT or Gravity.BOTTOM, 0, 0)
+    }
+
+    private fun openSecureFileCrypto() {
+        val intent = Intent(this, FileCryptoActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        selectedSecureContact?.let { intent.putExtra(FileCryptoActivity.EXTRA_CONTACT_NAME, it) }
+        startActivity(intent)
+    }
+
     private fun buildSecureComposePage(root: LinearLayout, heightDp: Int) {
         val decrypted = cryptoDecryptedText
         if (decrypted != null) {
@@ -760,14 +863,32 @@ class SecureInputMethodService : InputMethodService() {
 
         // Encrypt/decrypt actions live right above the keys, always
         // visible and always reachable without leaving this screen.
-        val actionRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        actionRow.addView(makeKey(getString(R.string.crypto_panel_send_btn), weight = 1f, heightDp = heightDp, accented = true) {
+        val actionRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
+        }
+        actionRow.addView(makeKey("🔐", weight = 1f, heightDp = heightDp, accented = true, a11yLabel = "تشفير وإرسال") {
             sendSecureCompose()
         })
-        actionRow.addView(makeKey(getString(R.string.crypto_panel_secure_decrypt_btn), weight = 1f, heightDp = heightDp) {
+        actionRow.addView(makeKey("🔓", weight = 1f, heightDp = heightDp, a11yLabel = "فك تشفير") {
             decryptClipboardInPlace()
         })
+        actionRow.addView(makeKey("👥", weight = 1f, heightDp = heightDp, accented = selectedSecureContact != null, a11yLabel = "جهات الاتصال الآمنة") {
+            showSecureContactsPanel(root)
+        })
+        actionRow.addView(makeKey("📎", weight = 1f, heightDp = heightDp, a11yLabel = "تشفير الملفات") {
+            openSecureFileCrypto()
+        })
         root.addView(actionRow)
+
+        val contactStatus = TextView(this).apply {
+            text = if (selectedSecureContact == null) "الجهة: غير محددة — سيُستخدم التشفير العام للجلسة" else "الجهة: 🔐 $selectedSecureContact — تشفير مرتبط بالجهازين"
+            setTextColor(if (selectedSecureContact == null) ThemeUtil.textColor(this@SecureInputMethodService) else ThemeUtil.accentColor(this@SecureInputMethodService))
+            textSize = 11f
+            gravity = Gravity.CENTER
+            setPadding(0, dpToPx(2f), 0, dpToPx(4f))
+        }
+        root.addView(contactStatus)
 
         val isArabic = letterMode == LetterMode.ARABIC
         val rows = if (isArabic) {
@@ -868,7 +989,14 @@ class SecureInputMethodService : InputMethodService() {
         cryptoExecutor.execute {
             var cipherText: String? = null
             try {
-                cipherText = CryptoEngine.encrypt(textChars, passphrase, expirySeconds = null)
+                cipherText = if (selectedSecureContact == null) {
+                    CryptoEngine.encrypt(textChars, passphrase, expirySeconds = null)
+                } else {
+                    val keyB64 = ContactStore.getPairedContact(this, selectedSecureContact!!)
+                        ?: throw IllegalStateException("paired contact missing")
+                    val publicKey = DeviceIdentity.parseContactPublicKey(keyB64)
+                    CryptoEngineV2.encrypt(this, textChars, passphrase, publicKey, expirySeconds = null)
+                }
             } finally {
                 java.util.Arrays.fill(textChars, ' ')
                 java.util.Arrays.fill(passphrase, ' ')
@@ -912,7 +1040,7 @@ class SecureInputMethodService : InputMethodService() {
         val cm = getSystemService(CLIPBOARD_SERVICE) as? ClipboardManager
         val clip = cm?.primaryClip
         val clipText = if (clip != null && clip.itemCount > 0) clip.getItemAt(0).text?.toString() else null
-        if (clipText.isNullOrBlank() || !CryptoEngine.looksLikeCiphertext(clipText)) {
+        if (clipText.isNullOrBlank()) {
             java.util.Arrays.fill(passphrase, ' ')
             android.widget.Toast.makeText(this, R.string.crypto_panel_no_ciphertext_toast, android.widget.Toast.LENGTH_SHORT).show()
             return
@@ -924,13 +1052,22 @@ class SecureInputMethodService : InputMethodService() {
             var expired = false
             var failed = false
             try {
-                val plainChars = CryptoEngine.decrypt(clipText, passphrase)
+                val plainChars = if (selectedSecureContact == null) {
+                    CryptoEngine.decrypt(clipText, passphrase)
+                } else {
+                    val keyB64 = ContactStore.getPairedContact(this, selectedSecureContact!!)
+                        ?: throw IllegalStateException("paired contact missing")
+                    val publicKey = DeviceIdentity.parseContactPublicKey(keyB64)
+                    CryptoEngineV2.decrypt(this, clipText, passphrase, publicKey)
+                }
                 try {
                     resultText = String(plainChars)
                 } finally {
                     java.util.Arrays.fill(plainChars, ' ')
                 }
             } catch (e: CryptoEngine.ExpiredMessageException) {
+                expired = true
+            } catch (e: CryptoEngineV2.ExpiredMessageException) {
                 expired = true
             } catch (e: Exception) {
                 failed = true
@@ -986,7 +1123,14 @@ class SecureInputMethodService : InputMethodService() {
         cryptoExecutor.execute {
             var cipherText: String? = null
             try {
-                cipherText = CryptoEngine.encrypt(textChars, passphrase, expirySeconds = null)
+                cipherText = if (selectedSecureContact == null) {
+                    CryptoEngine.encrypt(textChars, passphrase, expirySeconds = null)
+                } else {
+                    val keyB64 = ContactStore.getPairedContact(this, selectedSecureContact!!)
+                        ?: throw IllegalStateException("paired contact missing")
+                    val publicKey = DeviceIdentity.parseContactPublicKey(keyB64)
+                    CryptoEngineV2.encrypt(this, textChars, passphrase, publicKey, expirySeconds = null)
+                }
             } finally {
                 java.util.Arrays.fill(textChars, ' ')
                 java.util.Arrays.fill(passphrase, ' ')
@@ -1046,13 +1190,22 @@ class SecureInputMethodService : InputMethodService() {
             var resultText: String? = null
             var expired = false
             try {
-                val plainChars = CryptoEngine.decrypt(clipText, passphrase)
+                val plainChars = if (selectedSecureContact == null) {
+                    CryptoEngine.decrypt(clipText, passphrase)
+                } else {
+                    val keyB64 = ContactStore.getPairedContact(this, selectedSecureContact!!)
+                        ?: throw IllegalStateException("paired contact missing")
+                    val publicKey = DeviceIdentity.parseContactPublicKey(keyB64)
+                    CryptoEngineV2.decrypt(this, clipText, passphrase, publicKey)
+                }
                 try {
                     resultText = String(plainChars)
                 } finally {
                     java.util.Arrays.fill(plainChars, ' ')
                 }
             } catch (e: CryptoEngine.ExpiredMessageException) {
+                expired = true
+            } catch (e: CryptoEngineV2.ExpiredMessageException) {
                 expired = true
             } catch (e: Exception) {
                 // falls through to the generic failure toast below
@@ -1625,6 +1778,7 @@ class SecureInputMethodService : InputMethodService() {
             else -> {
                 showingCrypto = false
                 clearSecureCompose()
+                selectedSecureContact = null
             }
         }
 
@@ -1690,6 +1844,7 @@ class SecureInputMethodService : InputMethodService() {
         currentWord.clear()
         lastFinishedWord = null
         cryptoDecryptedText = null
+        contactPopup?.dismiss()
         // Safe to unconditionally drop here even with cryptoMenuSticky
         // set - onStartInputView is what actually decides whether to
         // restore the crypto menu on the next focus, based on that flag,
@@ -1719,6 +1874,7 @@ class SecureInputMethodService : InputMethodService() {
      * and post its result).
      */
     override fun onDestroy() {
+        contactPopup?.dismiss()
         mainHandler.removeCallbacks(suggestionUpdateRunnable)
         super.onDestroy()
         cryptoExecutor.shutdownNow()

@@ -1,12 +1,14 @@
 <resources>
     <!-- Premium dark palette: deep ink background, lifted surfaces, crisp text. -->
-    <color name="navy_950">#070B12</color>
-    <color name="navy_900">#111925</color>
-    <color name="navy_800">#1A2533</color>
-    <color name="navy_700">#334155</color>
-    <color name="slate_400">#A8B3C2</color>
+    <color name="navy_950">#050708</color>
+    <color name="navy_900">#0D1214</color>
+    <color name="navy_800">#171E20</color>
+    <color name="navy_700">#2B3538</color>
+    <color name="slate_400">#AAB6B9</color>
     <color name="slate_200">#F8FAFC</color>
     <color name="white">#FFFFFF</color>
 
     <color name="accent_gold">#F0B94A</color>
+    <!-- Primary secure-green palette used by the secure keyboard UI. -->
+    <color name="accent_secure_green">#69FF46</color>
 </resources>

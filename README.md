@@ -1,5 +1,13 @@
 # Secure Keyboard Pro (مشروع Android — Kotlin)
 
+## Secure contact keyboard + file encryption (2.1)
+
+The secure-compose keyboard now has four compact actions: encrypt/send, decrypt, paired contacts, and file encryption. Selecting a paired contact binds secure text and file encryption to that contact's ECDH identity.
+
+File encryption uses a streaming AES-256-GCM content cipher with a separate file-domain HKDF key derived from the ECDH shared secret plus the active session passphrase. The original filename is encrypted as authenticated metadata. Large files are processed in chunks instead of loading the whole file into memory.
+
+The file workflow is intentionally explicit: choose a paired contact, select a source file, choose the destination, then encrypt/decrypt. No network permission is added.
+
 ## أحدث جولة تعديلات — رفع Argon2id + تشفير القواميس المحلية + إصلاحان في الكيبورد
 
 1. **رفع معاملات Argon2id من 64MB إلى 256MB** (128MB تلقائيا على أجهزة

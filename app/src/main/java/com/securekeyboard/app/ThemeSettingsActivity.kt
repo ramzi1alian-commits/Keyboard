@@ -14,6 +14,7 @@ class ThemeSettingsActivity : AppCompatActivity() {
     private lateinit var swatchTeal: View
     private lateinit var swatchGold: View
     private lateinit var swatchPurple: View
+    private lateinit var swatchSecureGreen: View
 
     private lateinit var btnDayMode: MaterialButton
     private lateinit var btnNightMode: MaterialButton
@@ -36,6 +37,7 @@ class ThemeSettingsActivity : AppCompatActivity() {
         swatchTeal = findViewById(R.id.swatchTeal)
         swatchGold = findViewById(R.id.swatchGold)
         swatchPurple = findViewById(R.id.swatchPurple)
+        swatchSecureGreen = findViewById(R.id.swatchSecureGreen)
 
         btnDayMode = findViewById(R.id.btnDayMode)
         btnNightMode = findViewById(R.id.btnNightMode)
@@ -54,6 +56,7 @@ class ThemeSettingsActivity : AppCompatActivity() {
         swatchTeal.setOnClickListener { pickAccent(R.color.accent_teal) }
         swatchGold.setOnClickListener { pickAccent(R.color.accent_gold) }
         swatchPurple.setOnClickListener { pickAccent(R.color.accent_purple) }
+        swatchSecureGreen.setOnClickListener { pickAccent(R.color.accent_secure_green) }
 
         btnDayMode.setOnClickListener {
             Prefs.setDarkMode(this, false)
@@ -138,6 +141,7 @@ class ThemeSettingsActivity : AppCompatActivity() {
         ThemeUtil.setSelected(swatchTeal, selectedAccentRes == R.color.accent_teal, accent)
         ThemeUtil.setSelected(swatchGold, selectedAccentRes == R.color.accent_gold, accent)
         ThemeUtil.setSelected(swatchPurple, selectedAccentRes == R.color.accent_purple, accent)
+        ThemeUtil.setSelected(swatchSecureGreen, selectedAccentRes == R.color.accent_secure_green, accent)
 
         val isDark = Prefs.isDarkMode(this)
         ThemeUtil.setSelected(btnDayMode, !isDark, accent)

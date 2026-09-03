@@ -51,6 +51,11 @@
             android:label="@string/pairing_title" />
 
         <activity
+            android:name=".FileCryptoActivity"
+            android:exported="false"
+            android:label="@string/file_crypto_title" />
+
+        <activity
             android:name=".AboutActivity"
             android:exported="false"
             android:label="@string/about_title" />

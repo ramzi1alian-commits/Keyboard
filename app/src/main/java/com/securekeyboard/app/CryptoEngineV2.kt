@@ -50,20 +50,16 @@ object CryptoEngineV2 {
      * output to match on the recipient's side - get either one wrong
      * and AES-GCM's auth tag simply fails to verify (see decrypt()).
      */
-    private fun deriveMessageKey(sharedSecret: ByteArray, passphraseChars: CharArray): ByteArray {
-        val ikm = sharedSecret + CryptoEngine.charsToUtf8Bytes(passphraseChars)
-        val salt = "SecureKeyboard-v1-e2e-salt".toByteArray(Charsets.UTF_8)
-        val info = "SecureKeyboard-message-key-v1".toByteArray(Charsets.UTF_8)
-
-        val prkMac = Mac.getInstance("HmacSHA256")
-        prkMac.init(SecretKeySpec(salt, "HmacSHA256"))
-        val prk = prkMac.doFinal(ikm)
-
-        val okmMac = Mac.getInstance("HmacSHA256")
-        okmMac.init(SecretKeySpec(prk, "HmacSHA256"))
-        val t = okmMac.doFinal(info + byteArrayOf(1))
-        return t.copyOf(KEY_LENGTH_BYTES)
-    }
+    private fun deriveMessageKey(
+        context: android.content.Context,
+        recipientPublicKey: PublicKey,
+        passphraseChars: CharArray
+    ): ByteArray = ContactCrypto.deriveAes256Key(
+        context,
+        recipientPublicKey,
+        passphraseChars,
+        ContactCrypto.Purpose.MESSAGE
+    )
 
     /**
      * @param recipientPublicKey the contact you're sending TO (from a
@@ -76,8 +72,7 @@ object CryptoEngineV2 {
         recipientPublicKey: PublicKey,
         expirySeconds: Long? = null
     ): String {
-        val sharedSecret = DeviceIdentity.computeSharedSecret(context, recipientPublicKey)
-        val keyBytes = deriveMessageKey(sharedSecret, passphraseChars)
+        val keyBytes = deriveMessageKey(context, recipientPublicKey, passphraseChars)
         val plainBytes = CryptoEngine.charsToUtf8Bytes(textChars)
         val iv = ByteArray(IV_LENGTH).also { SecureRandom().nextBytes(it) }
         try {
@@ -96,7 +91,6 @@ object CryptoEngineV2 {
         } finally {
             Arrays.fill(keyBytes, 0)
             Arrays.fill(plainBytes, 0)
-            Arrays.fill(sharedSecret, 0)
         }
     }
 
@@ -129,8 +123,7 @@ object CryptoEngineV2 {
         val iv = combined.copyOfRange(HEADER_LENGTH, HEADER_LENGTH + IV_LENGTH)
         val cipherBytes = combined.copyOfRange(HEADER_LENGTH + IV_LENGTH, combined.size)
 
-        val sharedSecret = DeviceIdentity.computeSharedSecret(context, senderPublicKey)
-        val keyBytes = deriveMessageKey(sharedSecret, passphraseChars)
+        val keyBytes = deriveMessageKey(context, senderPublicKey, passphraseChars)
         try {
             val key = SecretKeySpec(keyBytes, "AES")
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -147,7 +140,6 @@ object CryptoEngineV2 {
             }
         } finally {
             Arrays.fill(keyBytes, 0)
-            Arrays.fill(sharedSecret, 0)
         }
     }
     class ExpiredMessageException : Exception()

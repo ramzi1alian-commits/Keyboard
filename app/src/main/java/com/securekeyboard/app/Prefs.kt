@@ -66,24 +66,27 @@ object Prefs {
     private const val ACCENT_TEAL = "teal"
     private const val ACCENT_GOLD = "gold"
     private const val ACCENT_PURPLE = "purple"
+    private const val ACCENT_SECURE_GREEN = "secure_green"
 
     private fun accentNameToRes(name: String?): Int = when (name) {
         ACCENT_TEAL -> R.color.accent_teal
         ACCENT_GOLD -> R.color.accent_gold
         ACCENT_PURPLE -> R.color.accent_purple
-        else -> R.color.accent_cyan
+        ACCENT_SECURE_GREEN -> R.color.accent_secure_green
+        else -> R.color.accent_secure_green
     }
 
     private fun resToAccentName(colorRes: Int): String = when (colorRes) {
         R.color.accent_teal -> ACCENT_TEAL
         R.color.accent_gold -> ACCENT_GOLD
         R.color.accent_purple -> ACCENT_PURPLE
-        else -> ACCENT_CYAN
+        R.color.accent_secure_green -> ACCENT_SECURE_GREEN
+        else -> ACCENT_SECURE_GREEN
     }
 
     fun accentColorRes(context: Context): Int {
         val pref = prefs(context)
-        return accentNameToRes(pref.getString(KEY_ACCENT, ACCENT_GOLD))
+        return accentNameToRes(pref.getString(KEY_ACCENT, ACCENT_SECURE_GREEN))
     }
 
     fun setAccentColorRes(context: Context, colorRes: Int) {
@@ -255,6 +258,9 @@ object ThemeUtil {
      */
     fun textColor(context: Context): Int =
         ContextCompat.getColor(themedContext(context), R.color.slate_200)
+
+    fun textSecondaryColor(context: Context): Int =
+        ContextCompat.getColor(themedContext(context), R.color.slate_400)
 
     /** Fixed dark color for text drawn on top of an accent-colored surface - see R.color.text_on_accent. */
     fun textOnAccentColor(context: Context): Int =
