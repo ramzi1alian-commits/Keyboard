@@ -2,9 +2,11 @@ package com.securekeyboard.app
 
 import android.app.Activity
 import android.content.Intent
+import android.provider.DocumentsContract
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
+import android.view.WindowManager
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.Spinner
@@ -30,10 +32,15 @@ class FileCryptoActivity : AppCompatActivity() {
         private const val PICK_INPUT = 5101
         private const val CREATE_OUTPUT = 5102
         private const val ADD_CONTACT = 5103
+        private const val CREATE_OUTPUT_TREE = 5104
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.setFlags(
+            WindowManager.LayoutParams.FLAG_SECURE,
+            WindowManager.LayoutParams.FLAG_SECURE
+        )
         setContentView(R.layout.activity_file_crypto)
         contactSpinner = findViewById(R.id.file_contact_spinner)
         selectedFileText = findViewById(R.id.file_selected_text)
@@ -42,9 +49,15 @@ class FileCryptoActivity : AppCompatActivity() {
         findViewById<Button>(R.id.file_add_contact).setOnClickListener {
             startActivityForResult(Intent(this, ContactPairingActivity::class.java), ADD_CONTACT)
         }
+        findViewById<Button>(R.id.file_open_encrypt).setOnClickListener {
+            startActivity(Intent(this, EncryptActivity::class.java))
+        }
         findViewById<Button>(R.id.file_pick_encrypt).setOnClickListener { chooseInput(1) }
         findViewById<Button>(R.id.file_pick_decrypt).setOnClickListener { chooseInput(2) }
         refreshContacts()
+        refreshSessionStatus()
+        ThemeUtil.tintPrimary(this, findViewById(R.id.file_pick_encrypt))
+        ThemeUtil.tintOutline(this, findViewById(R.id.file_add_contact), findViewById(R.id.file_pick_decrypt), findViewById(R.id.file_open_encrypt))
         val preferred = intent.getStringExtra(EXTRA_CONTACT_NAME)
         if (!preferred.isNullOrBlank()) {
             val index = names.indexOf(preferred)
@@ -52,16 +65,40 @@ class FileCryptoActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        refreshContacts()
+        refreshSessionStatus()
+    }
+
     private fun refreshContacts() {
         names.clear()
         names.addAll(ContactStore.listPairedContactNames(this))
         val labels = if (names.isEmpty()) listOf("لا توجد جهات اتصال آمنة") else names.toList()
-        contactSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, labels).also {
-            it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        contactSpinner.adapter = ArrayAdapter(this, R.layout.spinner_item_light_text, labels).also {
+            it.setDropDownViewResource(R.layout.spinner_dropdown_item_light_text)
+        }
+    }
+
+    private fun refreshSessionStatus() {
+        val openButton = findViewById<Button>(R.id.file_open_encrypt)
+        if (SessionKeyStore.isActive()) {
+            statusText.text = getString(R.string.file_session_active, SessionKeyStore.remainingMinutes())
+            statusText.setTextColor(ThemeUtil.accentColor(this))
+            openButton.visibility = View.GONE
+        } else {
+            statusText.text = getString(R.string.file_session_inactive)
+            statusText.setTextColor(ThemeUtil.textSecondaryColor(this))
+            openButton.visibility = View.VISIBLE
         }
     }
 
     private fun chooseInput(operation: Int) {
+        if (!SessionKeyStore.isActive()) {
+            refreshSessionStatus()
+            Toast.makeText(this, R.string.crypto_panel_no_session, Toast.LENGTH_LONG).show()
+            return
+        }
         if (names.isEmpty()) {
             Toast.makeText(this, "أضف جهة اتصال آمنة أولًا", Toast.LENGTH_LONG).show()
             return
@@ -87,28 +124,72 @@ class FileCryptoActivity : AppCompatActivity() {
                 selectedDisplayName = queryDisplayName(uri) ?: "file"
                 selectedFileText.text = selectedDisplayName
                 statusText.text = if (pendingOperation == 1) "اختر مكان حفظ الملف المشفر" else "اختر مكان حفظ الملف بعد فك التشفير"
-                val create = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                    addCategory(Intent.CATEGORY_OPENABLE)
-                    type = "application/octet-stream"
-                    putExtra(Intent.EXTRA_TITLE, if (pendingOperation == 1) "$selectedDisplayName.skf" else "decrypted_$selectedDisplayName")
-                }
-                startActivityForResult(create, CREATE_OUTPUT)
+                launchOutputPicker()
             }
             return
         }
-        if (requestCode == CREATE_OUTPUT && resultCode == Activity.RESULT_OK) {
+        if (requestCode == CREATE_OUTPUT_TREE && resultCode == Activity.RESULT_OK) {
+            val treeUri = data?.data ?: return
+            try {
+                contentResolver.takePersistableUriPermission(
+                    treeUri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            } catch (_: Exception) {
+                // Some OEMs do not grant persistable permissions; the current
+                // operation can still proceed while this activity is alive.
+            }
             val input = selectedInputUri ?: return
-            val output = data?.data ?: return
-            runFileOperation(input, output, pendingOperation)
+            val name = if (pendingOperation == 1) "$selectedDisplayName.skf" else "decrypted_$selectedDisplayName"
+            val output = try {
+                DocumentsContract.buildDocumentUriUsingTree(
+                    treeUri,
+                    DocumentsContract.getTreeDocumentId(treeUri)
+                )
+            } catch (_: Exception) {
+                treeUri
+            }
+            // Prefer a real file URI when the tree provider supports creating one.
+            val created = try {
+                DocumentsContract.createDocument(contentResolver, output, "application/octet-stream", name)
+            } catch (_: Exception) { null }
+            if (created != null) {
+                runFileOperation(input, created, pendingOperation)
+            } else {
+                statusText.text = "تعذر إنشاء الملف في المجلد المحدد"
+                Toast.makeText(this, statusText.text, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    /**
+     * Pick an output folder rather than relying on OEM-specific CREATE_DOCUMENT
+     * confirmation buttons. DocumentsUI then exposes its standard folder
+     * confirmation action ("Use this folder" / "اختيار"). The app creates the
+     * output file itself inside the selected folder.
+     */
+    private fun launchOutputPicker() {
+        val tree = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                    Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+        }
+        try {
+            startActivityForResult(tree, CREATE_OUTPUT_TREE)
+        } catch (e: Exception) {
+            statusText.text = "تعذر فتح مدير الملفات: ${e.message ?: "غير مدعوم على هذا الجهاز"}"
+            Toast.makeText(this, statusText.text, Toast.LENGTH_LONG).show()
         }
     }
 
     private fun runFileOperation(input: Uri, output: Uri, operation: Int) {
         val pass = SessionKeyStore.get()
         if (pass == null) {
+            refreshSessionStatus()
             Toast.makeText(this, R.string.crypto_panel_no_session, Toast.LENGTH_LONG).show()
             return
         }
+        refreshSessionStatus()
         val contactName = names.getOrNull(contactSpinner.selectedItemPosition)
         if (contactName == null) {
             Toast.makeText(this, "اختر جهة اتصال آمنة", Toast.LENGTH_LONG).show()

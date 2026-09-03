@@ -817,11 +817,29 @@ class SecureInputMethodService : InputMethodService() {
         panel.addView(clear, LinearLayout.LayoutParams(-1, dpToPx(36f)))
 
         val width = dpToPx(285f)
-        val panelHeight = anchor.rootView.height.takeIf { it > dpToPx(120f) } ?: WindowManager.LayoutParams.WRAP_CONTENT
-        val popup = PopupWindow(panel, width, panelHeight, true).apply {
+        // Keep the drawer bounded to the visible IME instead of using the
+        // entire root height. A full-height PopupWindow can be clipped or
+        // re-laid-out differently by OEM IME implementations.
+        val rootHeight = anchor.rootView.height
+        val panelHeight = if (rootHeight > dpToPx(160f)) {
+            minOf((rootHeight * 0.88f).toInt(), dpToPx(430f))
+        } else {
+            WindowManager.LayoutParams.WRAP_CONTENT
+        }
+        // IMPORTANT for IME stability: a focusable PopupWindow creates a
+        // second focusable window above the InputMethodService. Several OEMs
+        // (and some Android versions) respond by finishing/reconfiguring the
+        // IME input view; onFinishInputView() then dismisses this popup almost
+        // immediately. The contacts drawer does not need keyboard focus, so
+        // keep it touchable but explicitly non-focusable.
+        val popup = PopupWindow(panel, width, panelHeight, false).apply {
             elevation = dpToPx(8f).toFloat()
             setBackgroundDrawable(ThemeUtil.keyboardBackground(this@SecureInputMethodService))
+            isTouchable = true
             isOutsideTouchable = true
+            isClippingEnabled = false
+            inputMethodMode = PopupWindow.INPUT_METHOD_NOT_NEEDED
+            softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
             setOnDismissListener { contactPopup = null }
         }
         contactPopup = popup

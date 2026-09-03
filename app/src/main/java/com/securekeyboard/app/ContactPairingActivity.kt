@@ -4,6 +4,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.os.Bundle
+import android.view.WindowManager
 import android.widget.Toast
 import android.widget.EditText
 import com.journeyapps.barcodescanner.ScanContract
@@ -46,6 +47,10 @@ class ContactPairingActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.setFlags(
+            WindowManager.LayoutParams.FLAG_SECURE,
+            WindowManager.LayoutParams.FLAG_SECURE
+        )
         setContentView(R.layout.activity_contact_pairing)
 
         contactName = intent.getStringExtra(EXTRA_CONTACT_NAME) ?: ""
@@ -53,6 +58,8 @@ class ContactPairingActivity : AppCompatActivity() {
         showMyQrCode()
         setupScanButton()
         setupConfirmButton()
+        ThemeUtil.tintPrimary(this, findViewById(R.id.confirm_match_button))
+        ThemeUtil.tintOutline(this, findViewById(R.id.scan_button))
     }
 
     /** Renders this device's own public key as a QR code for the other person to scan. */
@@ -86,6 +93,7 @@ class ContactPairingActivity : AppCompatActivity() {
 
     private fun launchQrScanner() {
         val options = ScanOptions().apply {
+            setCaptureActivity(SecureCaptureActivity::class.java)
             setDesiredBarcodeFormats(ScanOptions.QR_CODE)
             setPrompt(getString(R.string.pairing_scan_prompt))
             setBeepEnabled(false)

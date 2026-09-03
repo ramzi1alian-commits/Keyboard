@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="AppTheme" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:windowNoTitle">true</item>
+        <item name="colorPrimary">@color/navy_900</item>
+        <item name="colorPrimaryDark">@color/navy_950</item>
+        <item name="colorAccent">@color/accent_cyan</item>
+        <item name="android:windowBackground">@color/navy_950</item>
+        <item name="android:statusBarColor">@color/navy_950</item>
+        <item name="android:navigationBarColor">@color/navy_950</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:fontFamily">sans</item>
+    </style>
+
+    <style name="ScannerTheme" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:windowBackground">@color/navy_950</item>
+        <item name="android:statusBarColor">@color/navy_950</item>
+        <item name="android:navigationBarColor">@color/navy_950</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="colorPrimary">@color/accent_secure_green</item>
+        <item name="colorAccent">@color/accent_secure_green</item>
+        <item name="android:textColorPrimary">@color/white</item>
+    </style>
+</resources>

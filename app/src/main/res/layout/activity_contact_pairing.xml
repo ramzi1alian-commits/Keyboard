@@ -1,59 +1,96 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="24dp"
-    android:gravity="center_horizontal">
+    android:background="@color/navy_950"
+    android:fillViewport="true">
 
-    <TextView
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/pairing_instruction"
-        android:textColor="@color/slate_200"
-        android:textSize="13sp"
-        android:gravity="center" />
+        android:orientation="vertical"
+        android:padding="20dp"
+        android:gravity="center_horizontal">
 
-    <EditText
-        android:id="@+id/contact_name_input"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:layout_marginTop="12dp"
-        android:hint="@string/pairing_name_hint"
-        android:inputType="textCapSentences"
-        android:background="@drawable/bg_input"
-        android:textColor="@color/slate_200"
-        android:textColorHint="@color/slate_400"
-        android:padding="12dp" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/pairing_title"
+            android:textColor="@color/white"
+            android:textSize="21sp"
+            android:textStyle="bold"
+            android:gravity="center" />
 
-    <ImageView
-        android:id="@+id/qr_image_view"
-        android:layout_width="220dp"
-        android:layout_height="220dp"
-        android:layout_marginTop="16dp"
-        android:contentDescription="@string/pairing_title" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="7dp"
+            android:text="@string/pairing_instruction"
+            android:textColor="@color/slate_400"
+            android:textSize="13sp"
+            android:lineSpacingExtra="3dp"
+            android:gravity="center" />
 
-    <Button
-        android:id="@+id/scan_button"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:text="@string/pairing_scan" />
+        <EditText
+            android:id="@+id/contact_name_input"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:layout_marginTop="14dp"
+            android:hint="@string/pairing_name_hint"
+            android:inputType="textCapSentences"
+            android:background="@drawable/bg_input"
+            android:textColor="@color/slate_200"
+            android:textColorHint="@color/slate_400"
+            android:padding="12dp" />
 
-    <TextView
-        android:id="@+id/safety_number_view"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:textSize="20sp"
-        android:letterSpacing="0.1"
-        android:textIsSelectable="true" />
+        <ImageView
+            android:id="@+id/qr_image_view"
+            android:layout_width="220dp"
+            android:layout_height="220dp"
+            android:layout_marginTop="16dp"
+            android:background="@color/white_card"
+            android:padding="8dp"
+            android:contentDescription="@string/pairing_title" />
 
-    <Button
-        android:id="@+id/confirm_match_button"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:text="@string/pairing_confirm" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/scan_button"
+            style="@style/SecondaryButton"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="16dp"
+            android:text="@string/pairing_scan" />
 
-</LinearLayout>
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="@string/pairing_safety_label"
+            android:textColor="@color/slate_400"
+            android:textSize="12sp"
+            android:gravity="center" />
+
+        <TextView
+            android:id="@+id/safety_number_view"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="5dp"
+            android:text="—"
+            android:textColor="@color/accent_secure_green"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.08"
+            android:gravity="center"
+            android:fontFamily="monospace"
+            android:textIsSelectable="true" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/confirm_match_button"
+            style="@style/PrimaryButton"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:layout_marginTop="18dp"
+            android:layout_marginBottom="10dp"
+            android:text="@string/pairing_confirm" />
+
+    </LinearLayout>
+</ScrollView>
