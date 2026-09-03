@@ -1,13 +1,3 @@
-package com.securekeyboard.app
-
-import android.content.Context
-import android.content.res.Configuration
-import android.graphics.Typeface
-import android.graphics.drawable.Drawable
-import android.graphics.drawable.GradientDrawable
-import android.graphics.drawable.StateListDrawable
-import androidx.core.content.ContextCompat
-
 object Prefs {
     private const val FILE = "secure_keyboard_prefs"
     private const val KEY_ACCENT = "accent_color_name"
@@ -16,6 +6,22 @@ object Prefs {
     private const val KEY_DENSITY = "density"
     private const val KEY_KEYBOARD_HEIGHT = "keyboard_height_dp"
     private const val KEY_AUTOCORRECT = "autocorrect_enabled"
+
+    // Preferences here are only UI/configuration state, not secrets.  The
+    // performance fix is to keep ONE process-local SharedPreferences handle
+    // instead of reopening and rereading the same XML file on every key draw.
+    // The previous implementation performed a disk-backed lookup for nearly
+    // every keyboard repaint. Values remain persisted across restarts, while
+    // hot-path reads are now memory-only.
+    @Volatile
+    private var sharedPrefs: SharedPreferences? = null
+
+    private fun prefs(context: Context): SharedPreferences =
+        sharedPrefs ?: synchronized(this) {
+            sharedPrefs ?: context.applicationContext
+                .getSharedPreferences(FILE, Context.MODE_PRIVATE)
+                .also { sharedPrefs = it }
+        }
 
     // Reasonable dp bounds for a comfortable-but-compact keyboard row.
     // (For reference: 1cm on a phone screen is roughly 63dp - the slider
@@ -65,22 +71,22 @@ object Prefs {
     }
 
     fun accentColorRes(context: Context): Int {
-        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
-        return accentNameToRes(prefs.getString(KEY_ACCENT, ACCENT_GOLD))
+        val pref = prefs(context)
+        return accentNameToRes(pref.getString(KEY_ACCENT, ACCENT_GOLD))
     }
 
     fun setAccentColorRes(context: Context, colorRes: Int) {
-        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
+        prefs(context).edit()
             .putString(KEY_ACCENT, resToAccentName(colorRes)).apply()
     }
 
     fun isDarkMode(context: Context): Boolean {
-        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val prefs = prefs(context)
         return prefs.getBoolean(KEY_DARK, true)
     }
 
     fun setDarkMode(context: Context, dark: Boolean) {
-        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
+        prefs(context).edit()
             .putBoolean(KEY_DARK, dark).apply()
     }
 
@@ -88,34 +94,34 @@ object Prefs {
     // of unambiguous typos (see Autocorrect.kt), but it still changes
     // what gets typed without an explicit tap, so it stays opt-in.
     fun autocorrectEnabled(context: Context): Boolean {
-        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val prefs = prefs(context)
         return prefs.getBoolean(KEY_AUTOCORRECT, false)
     }
 
     fun setAutocorrectEnabled(context: Context, enabled: Boolean) {
-        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
+        prefs(context).edit()
             .putBoolean(KEY_AUTOCORRECT, enabled).apply()
     }
 
     // 0 = default sans-serif, 1 = serif, 2 = monospace
     fun fontChoice(context: Context): Int {
-        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val prefs = prefs(context)
         return prefs.getInt(KEY_FONT, 0)
     }
 
     fun setFontChoice(context: Context, choice: Int) {
-        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
+        prefs(context).edit()
             .putInt(KEY_FONT, choice).apply()
     }
 
     // 0 = comfortable, 1 = compact
     fun density(context: Context): Int {
-        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val prefs = prefs(context)
         return prefs.getInt(KEY_DENSITY, 0)
     }
 
     fun setDensity(context: Context, value: Int) {
-        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
+        prefs(context).edit()
             .putInt(KEY_DENSITY, value).apply()
     }
 
@@ -132,14 +138,14 @@ object Prefs {
      * the user in Settings instead of a single value baked in once.
      */
     fun keyboardHeightDp(context: Context): Int {
-        val prefs = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val prefs = prefs(context)
         val value = prefs.getInt(KEY_KEYBOARD_HEIGHT, DEFAULT_KEYBOARD_HEIGHT_DP)
         return value.coerceIn(MIN_KEYBOARD_HEIGHT_DP, MAX_KEYBOARD_HEIGHT_DP)
     }
 
     fun setKeyboardHeightDp(context: Context, dp: Int) {
         val clamped = dp.coerceIn(MIN_KEYBOARD_HEIGHT_DP, MAX_KEYBOARD_HEIGHT_DP)
-        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
+        prefs(context).edit()
             .putInt(KEY_KEYBOARD_HEIGHT, clamped).apply()
     }
 }

@@ -5,91 +5,53 @@ import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * PhraseDictionary
- *
- * A PERSONAL, ON-DEVICE, PER-SENTENCE frequency dictionary that grows
- * from whole lines the user finishes with the إدخال (Enter) key - only
- * in fields the focused app has NOT marked sensitive. Gated by the exact
- * same [suggestionsEnabled] check in SecureInputMethodService that gates
- * LearnedDictionary, so a sensitive field never reaches learn() here
- * either.
- *
- * READ THIS BEFORE ASSUMING IT'S "JUST LIKE LearnedDictionary" - IT IS A
- * BIGGER PRIVACY TRADE-OFF AND SHOULD BE UNDERSTOOD AS SUCH:
- *
- * - LearnedDictionary only ever stores individual WORDS with a typed
- *   count - never in the order typed, never as a sentence, never with
- *   any surrounding context.
- * - This class stores WHOLE LINES OF TEXT, close to verbatim (the line
- *   the user just finished with Enter, in a non-sensitive field), so
- *   that exact sentence can be offered again later as a one-tap
- *   suggestion. That is real, on-device storage of something much
- *   closer to "what you actually wrote" than a word-frequency count is.
- * - Still: this file never leaves the device (the app declares no
- *   android.permission.INTERNET anywhere), it is excluded from Android
- *   backups exactly like learned_words.tsv (see
- *   android:allowBackup="false" / dataExtractionRules), and the user can
- *   wipe it at any time from Settings ("مسح الجمل المحفوظة") - separate
- *   from, and in addition to, clearing the learned-words list.
- * - A line is only ever saved once it has at least two words - a single
- *   word typed and finished with Enter is left to LearnedDictionary, not
- *   duplicated here.
- * - Long lines are capped (see MAX_PHRASE_LENGTH): anything longer than
- *   that is skipped entirely, never truncated-and-saved, so a long
- *   pasted paragraph or message can't quietly end up stored whole.
- * - This is a frequency counter over exact lines, not a timestamped log:
- *   a saved phrase tells you it was typed N times, nothing about when.
+ * Personal on-device phrase-frequency dictionary.
+ * Sensitive fields are gated by SecureInputMethodService and never call learn().
+ * Disk storage is encrypted with LocalStorageCrypto (Android Keystore + AES-GCM).
  */
 object PhraseDictionary {
 
     private const val FILE_NAME = "learned_phrases.tsv"
-
-    // Sentences take much more room than single words, so the cap here
-    // is far lower than LearnedDictionary's MAX_ENTRIES - this is meant
-    // to hold a modest set of genuinely-repeated phrases, not a growing
-    // transcript.
     private const val MAX_ENTRIES = 300
     private const val MAX_PHRASE_LENGTH = 120
 
     private val counts = ConcurrentHashMap<String, Int>()
-
-    @Volatile
-    private var loaded = false
+    private val loadStarted = AtomicBoolean(false)
+    private val persistExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "phrase-dictionary-persist").apply { isDaemon = true }
+    }
 
     fun preload(context: Context) {
-        if (loaded) return
+        if (!loadStarted.compareAndSet(false, true)) return
         Thread {
             loadFromDisk(context.applicationContext)
-            loaded = true
         }.apply { isDaemon = true }.start()
     }
 
-    /**
-     * Records [line] as a finished phrase, but only if it's a genuine
-     * multi-word sentence within the length cap - blank, single-word, or
-     * over-length input is silently ignored, so the caller doesn't need
-     * to pre-filter before calling this.
-     */
     fun learn(context: Context, line: String) {
         val phrase = line.trim()
         if (phrase.isEmpty() || phrase.length > MAX_PHRASE_LENGTH) return
-        val wordCount = phrase.split(Regex("\\s+")).count { it.isNotEmpty() }
-        if (wordCount < 2) return
-        counts.merge(phrase, 1) { old, inc -> old + inc }
+        var words = 0
+        var insideWord = false
+        for (c in phrase) {
+            if (c.isWhitespace()) {
+                insideWord = false
+            } else if (!insideWord) {
+                words++
+                insideWord = true
+            }
+        }
+        if (words < 2) return
+        counts.merge(phrase, 1) { old, inc -> (old + inc).coerceAtMost(Int.MAX_VALUE) }
         persist(context.applicationContext)
     }
 
-    /**
-     * Up to [max] previously-saved phrases whose FIRST word starts with
-     * [prefix], most-used first - so a phrase can be offered as a
-     * one-tap suggestion as soon as the user starts typing its opening
-     * word again.
-     */
     fun suggestionsFor(prefix: String, max: Int = 2): List<String> {
-        if (prefix.isEmpty()) return emptyList()
-        if (counts.isEmpty()) return emptyList()
+        if (prefix.isEmpty() || counts.isEmpty() || max <= 0) return emptyList()
         return counts.entries.asSequence()
             .filter { entry ->
                 val firstWord = entry.key.substringBefore(' ')
@@ -101,60 +63,71 @@ object PhraseDictionary {
             .toList()
     }
 
-    /** Wipes all saved phrases, in memory and on disk, immediately. */
     fun clear(context: Context) {
         counts.clear()
-        Thread {
+        persistExecutor.execute {
             try {
                 File(context.applicationContext.filesDir, FILE_NAME).delete()
             } catch (_: Exception) {
-                // Worst case it's stale/empty and gets overwritten by
-                // the next persist() anyway.
+                // Best effort; memory is already cleared.
             }
-        }.apply { isDaemon = true }.start()
+        }
     }
 
-    /**
-     * SECURITY FIX: this file used to be written as plain UTF-8 text -
-     * see LocalStorageCrypto's doc. It is now encrypted at rest with a
-     * Keystore-backed key; the TSV format itself is unchanged.
-     */
     private fun loadFromDisk(context: Context) {
         val file = File(context.filesDir, FILE_NAME)
         if (!file.exists()) return
+        var encrypted: ByteArray? = null
+        var decrypted: ByteArray? = null
         try {
-            val decrypted = LocalStorageCrypto.decrypt(file.readBytes()) ?: return
+            encrypted = file.readBytes()
+            decrypted = LocalStorageCrypto.decrypt(encrypted) ?: return
             BufferedReader(InputStreamReader(decrypted.inputStream(), Charsets.UTF_8)).use { reader ->
                 reader.forEachLine { line ->
                     val tab = line.indexOf('\t')
                     if (tab <= 0) return@forEachLine
                     val phrase = line.substring(0, tab)
                     val count = line.substring(tab + 1).toIntOrNull() ?: return@forEachLine
-                    if (phrase.isNotEmpty()) counts[phrase] = count
+                    if (phrase.isNotEmpty() && count > 0) counts[phrase] = count
                 }
             }
         } catch (_: Exception) {
-            // Corrupt/unreadable file - start fresh rather than crash
-            // the keyboard over a non-essential feature.
+            // Corrupt/unreadable storage never crashes the keyboard.
+        } finally {
+            encrypted?.fill(0)
+            decrypted?.fill(0)
         }
     }
 
     private fun persist(context: Context) {
-        Thread {
+        persistExecutor.execute {
             trimIfNeeded()
+            var plainBytes: ByteArray? = null
+            var encryptedBytes: ByteArray? = null
             try {
-                context.openFileOutput(FILE_NAME, Context.MODE_PRIVATE).use { out ->
-                    val sb = StringBuilder()
-                    for ((phrase, count) in counts) {
-                        sb.append(phrase).append('\t').append(count).append('\n')
-                    }
-                    out.write(LocalStorageCrypto.encrypt(sb.toString().toByteArray(Charsets.UTF_8)))
+                val sb = StringBuilder()
+                for ((phrase, count) in counts) {
+                    sb.append(phrase).append('\t').append(count).append('\n')
+                }
+                plainBytes = sb.toString().toByteArray(Charsets.UTF_8)
+                encryptedBytes = LocalStorageCrypto.encrypt(plainBytes)
+                val target = File(context.filesDir, FILE_NAME)
+                val temp = File(context.filesDir, "$FILE_NAME.tmp")
+                temp.outputStream().use { out ->
+                    out.write(encryptedBytes)
+                    out.flush()
+                }
+                if (!temp.renameTo(target)) {
+                    temp.delete()
+                    throw java.io.IOException("atomic dictionary replace failed")
                 }
             } catch (_: Exception) {
-                // Learning is a nice-to-have, not core functionality - a
-                // failed save here should never crash typing.
+                // Learning is optional; never break typing.
+            } finally {
+                plainBytes?.fill(0)
+                encryptedBytes?.fill(0)
             }
-        }.apply { isDaemon = true }.start()
+        }
     }
 
     private fun trimIfNeeded() {
@@ -162,8 +135,6 @@ object PhraseDictionary {
         val toRemove = counts.entries
             .sortedBy { it.value }
             .take(counts.size - MAX_ENTRIES)
-        for (entry in toRemove) {
-            counts.remove(entry.key)
-        }
+        for (entry in toRemove) counts.remove(entry.key)
     }
 }

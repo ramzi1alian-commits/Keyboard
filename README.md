@@ -319,3 +319,17 @@ app/src/main/AndroidManifest.xml  ← لاحظ: لا توجد صلاحية INTER
 الكتابة اليومية العصرية (واتساب/تويتر مثلا). لتحسين الدقة لاحقا، استبدل
 `assets/ar_words.tsv` بقائمة من نسخة **MSA** (الفصحى الحديثة) من نفس
 المصدر، بنفس الصيغة (كلمة، تاب، رقم).
+
+## Build on GitHub
+
+The repository includes a GitHub Actions workflow at `.github/workflows/android-build.yml`.
+It installs Gradle 8.4 and JDK 17, then builds `assembleDebug` and publishes the APK as a workflow artifact.
+
+### Security notes
+
+- No `android.permission.INTERNET` is declared.
+- User-learned dictionaries are encrypted at rest with Android Keystore AES-GCM.
+- Clipboard output is marked sensitive and auto-cleared by the app where supported.
+- Password/sensitive input fields disable suggestions and learning.
+- Argon2id KDF parameters are bounded before expensive memory allocation to prevent crafted-ciphertext resource exhaustion.
+- Release signing is intentionally not committed. Configure a private release keystore through CI secrets/environment variables.

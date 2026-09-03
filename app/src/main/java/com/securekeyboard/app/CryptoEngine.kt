@@ -79,6 +79,13 @@ object CryptoEngine {
     // previous 64 MB baseline. Chosen automatically by encrypt() based on
     // Runtime.getRuntime().maxMemory() - see chooseArgonMemoryKb().
     private const val REDUCED_ARGON_MEMORY_KB = 131072 // 128 MB
+    private const val MIN_ARGON_MEMORY_KB = 32768 // 32 MB
+    private const val MAX_ARGON_MEMORY_KB = ARGON_MEMORY_KB // 256 MB
+    private const val MIN_ARGON_ITERATIONS = 2
+    private const val MAX_ARGON_ITERATIONS = 6
+    private const val MIN_ARGON_PARALLELISM = 1
+    private const val MAX_ARGON_PARALLELISM = 4
+    private const val MAX_CIPHERTEXT_BASE64_CHARS = 8 * 1024 * 1024
 
     // Legacy parameters - ONLY ever used to decrypt old v2 ciphertexts
     // that don't carry their own Argon2 params. Never used for encrypting
@@ -159,6 +166,11 @@ object CryptoEngine {
     }
 
     fun encrypt(textChars: CharArray, passChars: CharArray, expirySeconds: Long?): String {
+        require(textChars.isNotEmpty()) { "plaintext is empty" }
+        require(passChars.isNotEmpty()) { "passphrase is empty" }
+        require(expirySeconds == null || expirySeconds in 0L..(365L * 24L * 60L * 60L)) {
+            "expiry is out of range"
+        }
         val salt = ByteArray(SALT_LENGTH).also { SecureRandom().nextBytes(it) }
         val iv = ByteArray(IV_LENGTH).also { SecureRandom().nextBytes(it) }
         val memoryKb = chooseArgonMemoryKb()
@@ -189,7 +201,12 @@ object CryptoEngine {
      * sensitive value in the whole app).
      */
     fun decrypt(b64: String, passChars: CharArray): CharArray {
-        val combined = Base64.decode(b64, Base64.NO_WRAP)
+        require(passChars.isNotEmpty()) { "passphrase is empty" }
+        val encoded = b64.trim()
+        require(encoded.isNotEmpty() && encoded.length <= MAX_CIPHERTEXT_BASE64_CHARS) {
+            "ciphertext too large or empty"
+        }
+        val combined = Base64.decode(encoded, Base64.NO_WRAP)
         require(combined.isNotEmpty()) { "ciphertext too short" }
 
         val headerLength = when (combined[0]) {
@@ -213,6 +230,23 @@ object CryptoEngine {
             Triple(headerBuf.int, headerBuf.get().toInt(), headerBuf.get().toInt())
         } else {
             Triple(LEGACY_V2_ARGON_MEMORY_KB, LEGACY_V2_ARGON_ITERATIONS, LEGACY_V2_ARGON_PARALLELISM)
+        }
+
+        // The v3 header is authenticated by GCM, but it must still be treated
+        // as untrusted BEFORE Argon2 allocates memory. Without bounds, an
+        // attacker could feed a crafted header containing a huge memory cost
+        // and turn decryption into an application-level memory exhaustion/DoS.
+        require(memoryKb in MIN_ARGON_MEMORY_KB..MAX_ARGON_MEMORY_KB) {
+            "invalid Argon2 memory cost"
+        }
+        require(iterations in MIN_ARGON_ITERATIONS..MAX_ARGON_ITERATIONS) {
+            "invalid Argon2 iteration count"
+        }
+        require(parallelism in MIN_ARGON_PARALLELISM..MAX_ARGON_PARALLELISM) {
+            "invalid Argon2 parallelism"
+        }
+        require(memoryKb >= parallelism * 8) {
+            "invalid Argon2 memory/parallelism combination"
         }
 
         // Checked BEFORE spending time on the (deliberately expensive)
