@@ -308,13 +308,11 @@ object ThemeUtil {
     }
 
     /**
-     * Corner radius used for every key / chip surface. Reverted back to
-     * the original 10dp square-ish look per user feedback - the rounder
-     * 16dp pass this went through briefly is gone; everything else from
-     * that visual refresh (elevation, palette, pill suggestion chips)
-     * stays.
+     * Corner radius used for every key / chip surface. Updated visual system: 9dp corners keep keys soft and modern without
+     * becoming oversized pills; paired with a restrained elevation system
+     * for clear tactile separation.
      */
-    private const val KEY_CORNER_RADIUS_DP = 6f
+    private const val KEY_CORNER_RADIUS_DP = 9f
 
     /**
      * Elevation (real View.elevation, not a drawn gradient trick) applied
@@ -324,8 +322,8 @@ object ThemeUtil {
      * presses drop to a lower elevation (see applyPressedElevation) to
      * sell a tactile "push down" on touch.
      */
-    const val KEY_ELEVATION_DP = 2.5f
-    const val KEY_ELEVATION_PRESSED_DP = 0.5f
+    const val KEY_ELEVATION_DP = 3.0f
+    const val KEY_ELEVATION_PRESSED_DP = 0.8f
 
     /**
      * Professional-looking keyboard key background: a subtle vertical
@@ -352,10 +350,9 @@ object ThemeUtil {
             val pressedColor = ContextCompat.getColor(ctx, R.color.navy_700)
             bg.colors = intArrayOf(pressedColor, pressedColor)
         } else {
-            // White-to-very-light-gray top-to-bottom gradient, on top of
-            // the darker keyboard surface color (navy_950) - this
-            // contrast (rather than the old near-identical whites) plus
-            // real elevation is what makes the key read as a raised card.
+            // Subtle surface gradient with clear separation from the keyboard
+            // background. The same surface hierarchy is used in both
+            // light and dark modes so the keyboard stays calm and premium.
             bg.colors = intArrayOf(
                 ContextCompat.getColor(ctx, R.color.navy_900),
                 ContextCompat.getColor(ctx, R.color.navy_800)
