@@ -30,12 +30,12 @@ class FileCryptoActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_CONTACT_NAME = "contact_name"
         private const val PICK_INPUT = 5101
-        private const val CREATE_OUTPUT = 5102
-        private const val ADD_CONTACT = 5103
+                private const val ADD_CONTACT = 5103
         private const val CREATE_OUTPUT_TREE = 5104
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        SessionKeyStore.initialize(this)
         super.onCreate(savedInstanceState)
         window.setFlags(
             WindowManager.LayoutParams.FLAG_SECURE,
@@ -151,12 +151,12 @@ class FileCryptoActivity : AppCompatActivity() {
             }
             // Prefer a real file URI when the tree provider supports creating one.
             val created = try {
-                DocumentsContract.createDocument(contentResolver, output, "application/octet-stream", name)
+                DocumentsContract.createDocument(contentResolver, output, "*/*", name)
             } catch (_: Exception) { null }
             if (created != null) {
                 runFileOperation(input, created, pendingOperation)
             } else {
-                statusText.text = "تعذر إنشاء الملف في المجلد المحدد"
+                statusText.text = "تعذر إنشاء الملف في المجلد المحدد. اختر مجلدًا قابلًا للكتابة مثل التنزيلات أو المستندات."
                 Toast.makeText(this, statusText.text, Toast.LENGTH_LONG).show()
             }
         }

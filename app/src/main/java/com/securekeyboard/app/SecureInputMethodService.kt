@@ -335,6 +335,7 @@ class SecureInputMethodService : InputMethodService() {
         TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp, resources.displayMetrics).toInt()
 
     override fun onCreateInputView(): View {
+        SessionKeyStore.initialize(this)
         // Block screenshots / screen recording of the keyboard surface,
         // to the extent the Android platform allows for an IME window.
         window?.window?.setFlags(
@@ -1189,15 +1190,20 @@ class SecureInputMethodService : InputMethodService() {
      */
     private fun decryptClipboard() {
         if (cryptoBusy) return
+        SessionKeyStore.initialize(this)
         val passphrase = SessionKeyStore.get()
         if (passphrase == null) {
             android.widget.Toast.makeText(this, R.string.crypto_panel_no_session, android.widget.Toast.LENGTH_SHORT).show()
             return
         }
         val cm = getSystemService(CLIPBOARD_SERVICE) as? ClipboardManager
-        val clip = cm?.primaryClip
-        val clipText = if (clip != null && clip.itemCount > 0) clip.getItemAt(0).text?.toString() else null
-        if (clipText.isNullOrBlank() || !CryptoEngine.looksLikeCiphertext(clipText)) {
+        val clip = try { cm?.primaryClip } catch (_: Exception) { null }
+        val clipText = try {
+            if (clip != null && clip.itemCount > 0) {
+                clip.getItemAt(0).coerceToText(this)?.toString()?.trim()
+            } else null
+        } catch (_: Exception) { null }
+        if (clipText.isNullOrBlank()) {
             java.util.Arrays.fill(passphrase, ' ')
             android.widget.Toast.makeText(this, R.string.crypto_panel_no_ciphertext_toast, android.widget.Toast.LENGTH_SHORT).show()
             return
@@ -1208,25 +1214,44 @@ class SecureInputMethodService : InputMethodService() {
             var resultText: String? = null
             var expired = false
             try {
-                val plainChars = if (selectedSecureContact == null) {
-                    CryptoEngine.decrypt(clipText, passphrase)
-                } else {
-                    val keyB64 = ContactStore.getPairedContact(this, selectedSecureContact!!)
-                        ?: throw IllegalStateException("paired contact missing")
-                    val publicKey = DeviceIdentity.parseContactPublicKey(keyB64)
-                    CryptoEngineV2.decrypt(this, clipText, passphrase, publicKey)
+                // First try the selected contact, then every paired contact.
+                // This is important after an IME recreation: Android may tear
+                // down the keyboard service and selectedSecureContact becomes
+                // null even though the copied ciphertext is still valid.
+                val candidates = LinkedHashSet<String>()
+                selectedSecureContact?.let { candidates.add(it) }
+                candidates.addAll(ContactStore.listPairedContactNames(this))
+
+                for (contactName in candidates) {
+                    try {
+                        val keyB64 = ContactStore.getPairedContact(this, contactName) ?: continue
+                        val publicKey = DeviceIdentity.parseContactPublicKey(keyB64)
+                        val plainChars = CryptoEngineV2.decrypt(this, clipText, passphrase, publicKey)
+                        try {
+                            resultText = String(plainChars)
+                        } finally {
+                            java.util.Arrays.fill(plainChars, ' ')
+                        }
+                        if (resultText != null) break
+                    } catch (e: CryptoEngineV2.ExpiredMessageException) {
+                        expired = true
+                    } catch (_: Exception) {
+                        // Try the next paired contact or passphrase-only mode.
+                    }
                 }
-                try {
-                    resultText = String(plainChars)
-                } finally {
-                    java.util.Arrays.fill(plainChars, ' ')
+
+                if (resultText == null) {
+                    try {
+                        val plainChars = CryptoEngine.decrypt(clipText, passphrase)
+                        try {
+                            resultText = String(plainChars)
+                        } finally {
+                            java.util.Arrays.fill(plainChars, ' ')
+                        }
+                    } catch (e: CryptoEngine.ExpiredMessageException) {
+                        expired = true
+                    }
                 }
-            } catch (e: CryptoEngine.ExpiredMessageException) {
-                expired = true
-            } catch (e: CryptoEngineV2.ExpiredMessageException) {
-                expired = true
-            } catch (e: Exception) {
-                // falls through to the generic failure toast below
             } finally {
                 java.util.Arrays.fill(passphrase, ' ')
             }
@@ -1305,13 +1330,21 @@ class SecureInputMethodService : InputMethodService() {
         }
         container.addView(closeButton)
 
+        val popupWidth = minOf(dpToPx(280f), (anchor.width * 0.92f).toInt().coerceAtLeast(dpToPx(220f)))
         popup = PopupWindow(
             container,
-            dpToPx(280f),
+            popupWidth,
             LinearLayout.LayoutParams.WRAP_CONTENT,
-            true
+            false
         )
+        // A focusable PopupWindow can cause some Android 12-14 IMEs/OEMs to
+        // recreate or finish the input view. Keep it non-focusable but
+        // touchable so the close button and outside-dismiss still work.
+        popup.isTouchable = true
         popup.isOutsideTouchable = true
+        popup.isClippingEnabled = false
+        popup.inputMethodMode = PopupWindow.INPUT_METHOD_NOT_NEEDED
+        popup.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
         popup.elevation = dpToPx(8f).toFloat()
         popup.showAtLocation(anchor, Gravity.CENTER, 0, 0)
     }

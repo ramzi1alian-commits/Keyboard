@@ -1,39 +1,107 @@
 package com.securekeyboard.app
 
+import android.content.Context
 import android.os.SystemClock
+import java.nio.ByteBuffer
 import java.util.Arrays
 
 /**
- * Short-lived, in-process passphrase session used only to avoid retyping the
- * same passphrase for the keyboard quick-crypto actions. It is NEVER persisted.
+ * Short-lived session passphrase.
  *
- * The timeout uses elapsedRealtime() rather than wall-clock time, so changing
- * the device clock cannot extend or shorten the session. The caller receives a
- * defensive copy and must clear it after use.
+ * The passphrase is encrypted at rest with the app's Android-Keystore-backed
+ * LocalStorageCrypto key so leaving the encryption screen / keyboard does not
+ * force the user to enter it again. Only the encrypted blob and an expiry
+ * timestamp are persisted; plaintext is kept in memory only while active.
  */
 object SessionKeyStore {
-
     const val DEFAULT_DURATION_MS = 30 * 60 * 1000L
     private const val MAX_DURATION_MS = 24 * 60 * 60 * 1000L
+    private const val PREFS = "secure_session_key_v2"
+    private const val BLOB = "encrypted_passphrase"
+    private const val EXPIRES_WALL = "expires_wall_ms"
 
-    @Volatile
-    private var passphrase: CharArray? = null
+    @Volatile private var passphrase: CharArray? = null
+    @Volatile private var expiresAtElapsedMs: Long = 0L
+    @Volatile private var expiresAtWallMs: Long = 0L
+    @Volatile private var initialized = false
+    private var appContext: Context? = null
 
-    @Volatile
-    private var expiresAtElapsedMs: Long = 0L
+    @Synchronized
+    fun initialize(context: Context) {
+        if (initialized) return
+        appContext = context.applicationContext
+        initialized = true
+        restorePersisted()
+    }
+
+    @Synchronized
+    private fun restorePersisted() {
+        val ctx = appContext ?: return
+        val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val expiresWall = prefs.getLong(EXPIRES_WALL, 0L)
+        val encrypted = prefs.getString(BLOB, null)
+        if (expiresWall <= System.currentTimeMillis() || encrypted.isNullOrEmpty()) {
+            prefs.edit().remove(BLOB).remove(EXPIRES_WALL).apply()
+            return
+        }
+        try {
+            val encoded = android.util.Base64.decode(encrypted, android.util.Base64.NO_WRAP)
+            val plain = LocalStorageCrypto.decrypt(encoded) ?: return
+            try {
+                val text = String(plain, Charsets.UTF_8)
+                if (text.isNotEmpty()) {
+                    passphrase = text.toCharArray()
+                    expiresAtWallMs = expiresWall
+                    expiresAtElapsedMs = SystemClock.elapsedRealtime() +
+                        (expiresWall - System.currentTimeMillis()).coerceAtLeast(1L)
+                }
+            } finally {
+                Arrays.fill(plain, 0)
+            }
+        } catch (_: Exception) {
+            prefs.edit().remove(BLOB).remove(EXPIRES_WALL).apply()
+        }
+    }
 
     @Synchronized
     fun set(chars: CharArray, durationMs: Long = DEFAULT_DURATION_MS) {
+        require(chars.isNotEmpty()) { "passphrase is empty" }
         val safeDuration = durationMs.coerceIn(1L, MAX_DURATION_MS)
         clear()
         passphrase = chars.copyOf()
         expiresAtElapsedMs = SystemClock.elapsedRealtime() + safeDuration
+        expiresAtWallMs = System.currentTimeMillis() + safeDuration
+        persist()
+    }
+
+    @Synchronized
+    private fun persist() {
+        val ctx = appContext ?: return
+        val p = passphrase ?: return
+        try {
+            val plain = String(p).toByteArray(Charsets.UTF_8)
+            try {
+                val encrypted = LocalStorageCrypto.encrypt(plain)
+                val b64 = android.util.Base64.encodeToString(encrypted, android.util.Base64.NO_WRAP)
+                ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                    .putString(BLOB, b64)
+                    .putLong(EXPIRES_WALL, expiresAtWallMs)
+                    .apply()
+                Arrays.fill(encrypted, 0)
+            } finally {
+                Arrays.fill(plain, 0)
+            }
+        } catch (_: Exception) {
+            // If persistence fails, keep the secure in-memory session alive.
+        }
     }
 
     @Synchronized
     fun get(): CharArray? {
+        if (!initialized) return null
         val p = passphrase ?: return null
-        if (SystemClock.elapsedRealtime() >= expiresAtElapsedMs) {
+        if (SystemClock.elapsedRealtime() >= expiresAtElapsedMs ||
+            System.currentTimeMillis() >= expiresAtWallMs) {
             clear()
             return null
         }
@@ -41,19 +109,19 @@ object SessionKeyStore {
     }
 
     @Synchronized
-    fun isActive(): Boolean {
-        val p = passphrase ?: return false
-        if (p.isEmpty() || SystemClock.elapsedRealtime() >= expiresAtElapsedMs) {
-            clear()
-            return false
-        }
-        return true
-    }
+    fun isActive(): Boolean = get()?.also { Arrays.fill(it, '\u0000') } != null
 
     @Synchronized
     fun remainingMinutes(): Long {
-        if (!isActive()) return 0L
-        val remainingMs = expiresAtElapsedMs - SystemClock.elapsedRealtime()
+        if (passphrase == null) return 0L
+        val remainingMs = minOf(
+            expiresAtElapsedMs - SystemClock.elapsedRealtime(),
+            expiresAtWallMs - System.currentTimeMillis()
+        )
+        if (remainingMs <= 0L) {
+            clear()
+            return 0L
+        }
         return ((remainingMs + 59_999L) / 60_000L).coerceAtLeast(1L)
     }
 
@@ -62,5 +130,8 @@ object SessionKeyStore {
         passphrase?.let { Arrays.fill(it, '\u0000') }
         passphrase = null
         expiresAtElapsedMs = 0L
+        expiresAtWallMs = 0L
+        appContext?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)?.edit()
+            ?.remove(BLOB)?.remove(EXPIRES_WALL)?.apply()
     }
 }

@@ -341,3 +341,17 @@ It installs Gradle 8.4 and JDK 17, then builds `assembleDebug` and publishes the
 - Password/sensitive input fields disable suggestions and learning.
 - Argon2id KDF parameters are bounded before expensive memory allocation to prevent crafted-ciphertext resource exhaustion.
 - Release signing is intentionally not committed. Configure a private release keystore through CI secrets/environment variables.
+
+## V13 compatibility fixes
+- Session key is encrypted at rest with the app's Android Keystore-backed local-storage key and restored for the remaining 30-minute session after leaving/reopening screens.
+- Clipboard decrypt now tries the selected contact, all paired contacts, and passphrase-only ciphertext, so an IME recreation does not lose the contact selection needed for decryption.
+- ECDH on Android 12-14 uses the Android Keystore provider first with a platform-provider compatibility fallback for OEM provider quirks.
+- File output creation uses a provider-compatible `*/*` MIME type after the user selects a writable folder.
+
+## V14 Android 8-14 compatibility
+
+V14 standardizes the contact ECDH implementation across API 24-34. The device ECDH private key is an EC P-256 software key encrypted at rest with the app's Android Keystore-backed local-storage key. This intentionally avoids the Android 12-14 OEM/provider incompatibility seen when trying to perform ECDH directly with a Keystore-resident EC private key.
+
+Because V14 creates a new device identity (`device_identity_v14.enc`), existing contact pairings from V13 must be paired again once after upgrading. The new identity is then stable across app restarts and is encrypted at rest.
+
+New message encryption uses a conservative Argon2id memory profile suitable for an IME process on Android 8-14; the selected memory cost is stored in the V3 ciphertext header, so decryption uses the exact parameters embedded in the message.

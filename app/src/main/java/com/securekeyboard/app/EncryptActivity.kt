@@ -100,6 +100,7 @@ class EncryptActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        SessionKeyStore.initialize(this)
         super.onCreate(savedInstanceState)
 
         val popupMode = intent?.getBooleanExtra(EXTRA_POPUP_MODE, false) == true

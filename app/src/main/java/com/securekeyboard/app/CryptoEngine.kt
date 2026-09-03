@@ -148,10 +148,18 @@ object CryptoEngine {
      */
     private fun chooseArgonMemoryKb(): Int {
         val maxHeapKb = Runtime.getRuntime().maxMemory() / 1024L
-        // Require the chosen Argon2 cost to be a clear fraction of the
-        // available heap, not close to all of it (other allocations -
-        // the plaintext, UI, dictionaries - share the same heap).
-        return if (maxHeapKb > ARGON_MEMORY_KB * 4) ARGON_MEMORY_KB else REDUCED_ARGON_MEMORY_KB
+        // The keyboard/IME shares this process heap with dictionaries, UI,
+        // clipboard text and Android framework objects. Android 14 devices
+        // can expose a large max heap while still giving an IME little
+        // practical headroom. Keep new encryption conservative enough for
+        // API 24-34, while retaining the exact parameters in the ciphertext
+        // header so decryption is deterministic.
+        return when {
+            maxHeapKb <= 256L * 1024L -> 32 * 1024
+            maxHeapKb <= 512L * 1024L -> 48 * 1024
+            maxHeapKb <= 768L * 1024L -> 64 * 1024
+            else -> 96 * 1024
+        }
     }
 
     private fun buildHeaderV3(hasExpiry: Boolean, expiryEpochSeconds: Long, memoryKb: Int): ByteArray {
