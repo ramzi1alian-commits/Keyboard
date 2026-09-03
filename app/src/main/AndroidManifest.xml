@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <uses-permission android:name="android.permission.CAMERA" />
+
     <!--
         IMPORTANT: This app requests NO permissions at all.
         Specifically, android.permission.INTERNET is NOT declared here.

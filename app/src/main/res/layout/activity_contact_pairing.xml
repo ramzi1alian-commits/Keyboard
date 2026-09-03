@@ -6,10 +6,30 @@
     android:padding="24dp"
     android:gravity="center_horizontal">
 
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/pairing_instruction"
+        android:textColor="@color/slate_200"
+        android:textSize="13sp"
+        android:gravity="center" />
+
+    <EditText
+        android:id="@+id/contact_name_input"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="12dp"
+        android:hint="@string/pairing_name_hint"
+        android:inputType="textCapSentences"
+        android:background="@drawable/bg_input"
+        android:textColor="@color/slate_200"
+        android:textColorHint="@color/slate_400"
+        android:padding="12dp" />
+
     <ImageView
         android:id="@+id/qr_image_view"
-        android:layout_width="240dp"
-        android:layout_height="240dp"
+        android:layout_width="220dp"
+        android:layout_height="220dp"
         android:layout_marginTop="16dp"
         android:contentDescription="@string/pairing_title" />
 
@@ -18,7 +38,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="24dp"
-        android:text="@string/pairing_title" />
+        android:text="@string/pairing_scan" />
 
     <TextView
         android:id="@+id/safety_number_view"
@@ -34,6 +54,6 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="24dp"
-        android:text="@string/pairing_success" />
+        android:text="@string/pairing_confirm" />
 
 </LinearLayout>

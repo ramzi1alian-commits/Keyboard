@@ -323,7 +323,7 @@ object ThemeUtil {
      * becoming oversized pills; paired with a restrained elevation system
      * for clear tactile separation.
      */
-    private const val KEY_CORNER_RADIUS_DP = 9f
+    private const val KEY_CORNER_RADIUS_DP = 5.5f
 
     /**
      * Elevation (real View.elevation, not a drawn gradient trick) applied

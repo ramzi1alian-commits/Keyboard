@@ -5,6 +5,10 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.os.Bundle
 import android.widget.Toast
+import android.widget.EditText
+import android.view.View
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import androidx.appcompat.app.AppCompatActivity
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
@@ -37,6 +41,9 @@ import java.security.PublicKey
 class ContactPairingActivity : AppCompatActivity() {
 
     private lateinit var contactName: String
+    private val scanLauncher = registerForActivityResult(ScanContract()) { result ->
+        if (result.contents != null) onScanResult(result.contents)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,7 +58,7 @@ class ContactPairingActivity : AppCompatActivity() {
 
     /** Renders this device's own public key as a QR code for the other person to scan. */
     private fun showMyQrCode() {
-        val myKey = DeviceIdentity.myPublicKeyBase64()
+        val myKey = QR_PREFIX + DeviceIdentity.myPublicKeyBase64()
         val qrView = findViewById<android.widget.ImageView>(R.id.qr_image_view)
         qrView.setImageBitmap(generateQrBitmap(myKey, 600))
     }
@@ -79,21 +86,27 @@ class ContactPairingActivity : AppCompatActivity() {
     }
 
     private fun launchQrScanner() {
-        // Implementation depends on which scanning library is added to
-        // build.gradle - wire up to onScanResult(scannedText) below.
+        val options = ScanOptions().apply {
+            setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+            setPrompt(getString(R.string.pairing_scan_prompt))
+            setBeepEnabled(false)
+            setOrientationLocked(false)
+        }
+        scanLauncher.launch(options)
     }
 
     /** Call this once the QR scanner returns the other device's public key string. */
     private fun onScanResult(scannedPublicKeyBase64: String) {
         try {
-            val contactPublicKey = DeviceIdentity.parseContactPublicKey(scannedPublicKeyBase64)
+            val cleanKey = scannedPublicKeyBase64.removePrefix(QR_PREFIX).trim()
+            val contactPublicKey = DeviceIdentity.parseContactPublicKey(cleanKey)
             val safetyNumber = computeSafetyNumber(
                 DeviceIdentity.myPublicKeyBase64(),
-                scannedPublicKeyBase64
+                cleanKey
             )
             findViewById<android.widget.TextView>(R.id.safety_number_view).text = safetyNumber
             pendingContactPublicKey = contactPublicKey
-            pendingContactPublicKeyBase64 = scannedPublicKeyBase64
+            pendingContactPublicKeyBase64 = cleanKey
         } catch (e: Exception) {
             Toast.makeText(this, getString(R.string.pairing_invalid_qr), Toast.LENGTH_LONG).show()
         }
@@ -130,6 +143,14 @@ class ContactPairingActivity : AppCompatActivity() {
                 Toast.makeText(this, getString(R.string.pairing_scan_first), Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
+            if (contactName.isBlank()) {
+                val nameInput = findViewById<EditText>(R.id.contact_name_input)
+                contactName = nameInput.text.toString().trim()
+            }
+            if (contactName.isBlank()) {
+                Toast.makeText(this, getString(R.string.pairing_name_required), Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
             // Persist the verified contact - see ContactStore (key-value
             // store of name -> public key, encrypted at rest via
             // LocalStorageCrypto, same as the rest of this app's local data).
@@ -142,5 +163,6 @@ class ContactPairingActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_CONTACT_NAME = "contact_name"
+        private const val QR_PREFIX = "SKPAIR1:"
     }
 }

@@ -140,4 +140,11 @@
     <string name="pairing_invalid_qr">رمز QR غير صالح</string>
     <string name="pairing_scan_first">امسح رمز QR الخاص بالطرف الآخر أولًا</string>
     <string name="pairing_success">تم ربط جهة الاتصال بنجاح</string>
+    <string name="pairing_scan">مسح رمز QR</string>
+    <string name="pairing_confirm">تأكيد: الرقم متطابق</string>
+    <string name="pairing_scan_prompt">وجّه الكاميرا إلى رمز QR في جهاز الطرف الآخر</string>
+    <string name="pairing_instruction">اعرض رمزك للطرف الآخر، ثم امسح رمزه. بعد ذلك قارنا رقم الأمان على الجهازين.</string>
+    <string name="pairing_name_hint">اسم جهة الاتصال</string>
+    <string name="pairing_name_required">أدخل اسم جهة الاتصال أولًا</string>
+
 </resources>

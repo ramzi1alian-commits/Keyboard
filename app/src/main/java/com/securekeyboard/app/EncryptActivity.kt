@@ -95,6 +95,7 @@ class EncryptActivity : AppCompatActivity() {
         // above for why full auto-injection isn't possible once a
         // separate Activity like this one takes over the screen.
         const val EXTRA_POPUP_MODE = "popup_mode"
+        private const val CONTACT_PAIRING_REQUEST = 4001
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -150,6 +151,10 @@ class EncryptActivity : AppCompatActivity() {
         recipientAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item_light_text)
         spinnerRecipient.adapter = recipientAdapter
 
+        findViewById<MaterialButton>(R.id.btnAddRecipient).setOnClickListener {
+            startActivityForResult(Intent(this, ContactPairingActivity::class.java), CONTACT_PAIRING_REQUEST)
+        }
+
         if (contactNames.isEmpty()) {
             findViewById<TextView>(R.id.noContactsHint)?.visibility = View.VISIBLE
         }
@@ -198,7 +203,7 @@ class EncryptActivity : AppCompatActivity() {
                         val recipientKeyB64 = ContactStore.getPairedContact(this, selectedContact)
                             ?: throw IllegalStateException("paired contact missing")
                         val recipientPublicKey = DeviceIdentity.parseContactPublicKey(recipientKeyB64)
-                        resultB64 = CryptoEngineV2.encrypt(textChars, passChars, recipientPublicKey)
+                        resultB64 = CryptoEngineV2.encrypt(textChars, passChars, recipientPublicKey, selectedExpirySeconds())
                     }
                     showResult(resultB64)
                     // The plaintext no longer needs to stay in the input
@@ -243,6 +248,8 @@ class EncryptActivity : AppCompatActivity() {
                         clearChars(plainChars)
                     }
                 } catch (e: CryptoEngine.ExpiredMessageException) {
+                    showError(getString(R.string.err_expired))
+                } catch (e: CryptoEngineV2.ExpiredMessageException) {
                     showError(getString(R.string.err_expired))
                 } catch (e: Exception) {
                     showError(getString(R.string.err_bad_key))
@@ -350,10 +357,21 @@ class EncryptActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        refreshRecipientSpinner()
         // The remaining-time text (and whether the session is still
         // active at all) can go stale while this screen isn't visible -
         // refresh it every time the user comes back to it.
         updateSessionKeyStatus()
+    }
+
+    private fun refreshRecipientSpinner() {
+        if (!::spinnerRecipient.isInitialized) return
+        val noRecipientLabel = getString(R.string.recipient_passphrase_only)
+        val names = ContactStore.listPairedContactNames(this)
+        val adapter = ArrayAdapter(this, R.layout.spinner_item_light_text, listOf(noRecipientLabel) + names)
+        adapter.setDropDownViewResource(R.layout.spinner_dropdown_item_light_text)
+        spinnerRecipient.adapter = adapter
+        findViewById<TextView>(R.id.noContactsHint)?.visibility = if (names.isEmpty()) View.VISIBLE else View.GONE
     }
 
     /** Reads the expiry Spinner (+ optional custom-minutes field) into a duration in seconds, or null for "never". */

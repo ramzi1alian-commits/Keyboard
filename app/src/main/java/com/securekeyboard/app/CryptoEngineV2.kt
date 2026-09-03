@@ -41,7 +41,8 @@ object CryptoEngineV2 {
 
     private const val IV_LENGTH = 12
     private const val KEY_LENGTH_BYTES = 32
-    const val FORMAT_VERSION: Byte = 1
+    const val FORMAT_VERSION: Byte = 2
+    private const val HEADER_LENGTH = 1 + 1 + 8 // version + expiry flag + expiry epoch seconds
 
     /**
      * HKDF-Extract-and-Expand (RFC 5869), combining the ECDH shared
@@ -71,14 +72,19 @@ object CryptoEngineV2 {
     fun encrypt(
         textChars: CharArray,
         passphraseChars: CharArray,
-        recipientPublicKey: PublicKey
+        recipientPublicKey: PublicKey,
+        expirySeconds: Long? = null
     ): String {
         val sharedSecret = DeviceIdentity.computeSharedSecret(recipientPublicKey)
         val keyBytes = deriveMessageKey(sharedSecret, passphraseChars)
         val plainBytes = CryptoEngine.charsToUtf8Bytes(textChars)
         val iv = ByteArray(IV_LENGTH).also { SecureRandom().nextBytes(it) }
         try {
-            val header = byteArrayOf(FORMAT_VERSION)
+            val header = ByteBuffer.allocate(HEADER_LENGTH)
+                .put(FORMAT_VERSION)
+                .put(if (expirySeconds != null) 1 else 0)
+                .putLong(if (expirySeconds != null) (System.currentTimeMillis() / 1000L) + expirySeconds else 0L)
+                .array()
             val key = SecretKeySpec(keyBytes, "AES")
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(128, iv))
@@ -104,12 +110,22 @@ object CryptoEngineV2 {
         senderPublicKey: PublicKey
     ): CharArray {
         val combined = Base64.decode(b64, Base64.NO_WRAP)
-        require(combined.size > 1 + IV_LENGTH) { "ciphertext too short" }
+        require(combined.size > HEADER_LENGTH + IV_LENGTH) { "ciphertext too short" }
         require(combined[0] == FORMAT_VERSION) { "unsupported format version" }
 
-        val header = combined.copyOfRange(0, 1)
-        val iv = combined.copyOfRange(1, 1 + IV_LENGTH)
-        val cipherBytes = combined.copyOfRange(1 + IV_LENGTH, combined.size)
+        val header = combined.copyOfRange(0, HEADER_LENGTH)
+        val headerBuffer = ByteBuffer.wrap(header)
+        headerBuffer.get()
+        val expiryFlag = headerBuffer.get().toInt()
+        val expiryEpochSeconds = headerBuffer.long
+        if (expiryFlag != 0) {
+            require(expiryEpochSeconds > 0L) { "invalid expiry" }
+            if (System.currentTimeMillis() / 1000L >= expiryEpochSeconds) {
+                throw ExpiredMessageException()
+            }
+        }
+        val iv = combined.copyOfRange(HEADER_LENGTH, HEADER_LENGTH + IV_LENGTH)
+        val cipherBytes = combined.copyOfRange(HEADER_LENGTH + IV_LENGTH, combined.size)
 
         val sharedSecret = DeviceIdentity.computeSharedSecret(senderPublicKey)
         val keyBytes = deriveMessageKey(sharedSecret, passphraseChars)
@@ -132,4 +148,5 @@ object CryptoEngineV2 {
             Arrays.fill(sharedSecret, 0)
         }
     }
+    class ExpiredMessageException : Exception()
 }
