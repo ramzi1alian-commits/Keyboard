@@ -204,7 +204,7 @@ class EncryptActivity : AppCompatActivity() {
                         val recipientKeyB64 = ContactStore.getPairedContact(this, selectedContact)
                             ?: throw IllegalStateException("paired contact missing")
                         val recipientPublicKey = DeviceIdentity.parseContactPublicKey(recipientKeyB64)
-                        resultB64 = CryptoEngineV2.encrypt(textChars, passChars, recipientPublicKey, selectedExpirySeconds())
+                        resultB64 = CryptoEngineV2.encrypt(this, textChars, passChars, recipientPublicKey, selectedExpirySeconds())
                     }
                     showResult(resultB64)
                     // The plaintext no longer needs to stay in the input
@@ -241,7 +241,7 @@ class EncryptActivity : AppCompatActivity() {
                         val senderKeyB64 = ContactStore.getPairedContact(this, selectedContact)
                             ?: throw IllegalStateException("paired contact missing")
                         val senderPublicKey = DeviceIdentity.parseContactPublicKey(senderKeyB64)
-                        CryptoEngineV2.decrypt(cipherB64, passChars, senderPublicKey)
+                        CryptoEngineV2.decrypt(this, cipherB64, passChars, senderPublicKey)
                     }
                     try {
                         showResult(plainChars)

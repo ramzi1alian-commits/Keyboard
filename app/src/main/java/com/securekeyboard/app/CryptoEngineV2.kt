@@ -32,7 +32,7 @@ import java.util.Arrays
  * mode selector.
  *
  * ONE-TIME SETUP REQUIRED per contact: both sides must exchange public
- * keys once (DeviceIdentity.myPublicKeyBase64()) via any channel before
+ * keys once (DeviceIdentity.myPublicKeyBase64(this)) via any channel before
  * the first message - a QR code scan in person is the strongest option
  * (prevents a man-in-the-middle substituting their own public key
  * during the exchange). See ContactPairingActivity (to be added).
@@ -70,12 +70,13 @@ object CryptoEngineV2 {
      *   prior one-time pairing exchange - see class doc)
      */
     fun encrypt(
+        context: android.content.Context,
         textChars: CharArray,
         passphraseChars: CharArray,
         recipientPublicKey: PublicKey,
         expirySeconds: Long? = null
     ): String {
-        val sharedSecret = DeviceIdentity.computeSharedSecret(recipientPublicKey)
+        val sharedSecret = DeviceIdentity.computeSharedSecret(context, recipientPublicKey)
         val keyBytes = deriveMessageKey(sharedSecret, passphraseChars)
         val plainBytes = CryptoEngine.charsToUtf8Bytes(textChars)
         val iv = ByteArray(IV_LENGTH).also { SecureRandom().nextBytes(it) }
@@ -105,6 +106,7 @@ object CryptoEngineV2 {
      *   equals their_priv+my_pub, so no separate "recipient key" needed)
      */
     fun decrypt(
+        context: android.content.Context,
         b64: String,
         passphraseChars: CharArray,
         senderPublicKey: PublicKey
@@ -127,7 +129,7 @@ object CryptoEngineV2 {
         val iv = combined.copyOfRange(HEADER_LENGTH, HEADER_LENGTH + IV_LENGTH)
         val cipherBytes = combined.copyOfRange(HEADER_LENGTH + IV_LENGTH, combined.size)
 
-        val sharedSecret = DeviceIdentity.computeSharedSecret(senderPublicKey)
+        val sharedSecret = DeviceIdentity.computeSharedSecret(context, senderPublicKey)
         val keyBytes = deriveMessageKey(sharedSecret, passphraseChars)
         try {
             val key = SecretKeySpec(keyBytes, "AES")

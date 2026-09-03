@@ -6,7 +6,6 @@ import android.graphics.Color
 import android.os.Bundle
 import android.widget.Toast
 import android.widget.EditText
-import android.view.View
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import androidx.appcompat.app.AppCompatActivity
@@ -22,7 +21,7 @@ import java.security.PublicKey
  * Two things happen here, both required:
  *
  * 1. Each side shows/scans a QR code carrying the OTHER side's public
- *    key (DeviceIdentity.myPublicKeyBase64()) - this is how the app
+ *    key (DeviceIdentity.myPublicKeyBase64(this)) - this is how the app
  *    learns which public key belongs to which contact.
  *
  * 2. Both sides compare a short SAFETY NUMBER derived from BOTH public
@@ -58,7 +57,7 @@ class ContactPairingActivity : AppCompatActivity() {
 
     /** Renders this device's own public key as a QR code for the other person to scan. */
     private fun showMyQrCode() {
-        val myKey = QR_PREFIX + DeviceIdentity.myPublicKeyBase64()
+        val myKey = QR_PREFIX + DeviceIdentity.myPublicKeyBase64(this)
         val qrView = findViewById<android.widget.ImageView>(R.id.qr_image_view)
         qrView.setImageBitmap(generateQrBitmap(myKey, 600))
     }
@@ -98,10 +97,13 @@ class ContactPairingActivity : AppCompatActivity() {
     /** Call this once the QR scanner returns the other device's public key string. */
     private fun onScanResult(scannedPublicKeyBase64: String) {
         try {
-            val cleanKey = scannedPublicKeyBase64.removePrefix(QR_PREFIX).trim()
+            if (!scannedPublicKeyBase64.trim().startsWith(QR_PREFIX)) {
+                throw IllegalArgumentException("unsupported pairing format")
+            }
+            val cleanKey = scannedPublicKeyBase64.trim().removePrefix(QR_PREFIX).trim()
             val contactPublicKey = DeviceIdentity.parseContactPublicKey(cleanKey)
             val safetyNumber = computeSafetyNumber(
-                DeviceIdentity.myPublicKeyBase64(),
+                DeviceIdentity.myPublicKeyBase64(this),
                 cleanKey
             )
             findViewById<android.widget.TextView>(R.id.safety_number_view).text = safetyNumber
