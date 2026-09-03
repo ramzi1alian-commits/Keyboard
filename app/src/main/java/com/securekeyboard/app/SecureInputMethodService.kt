@@ -1257,7 +1257,7 @@ class SecureInputMethodService : InputMethodService() {
             minWidth = 0
             minHeight = 0
             setPadding(0, 0, 0, 0)
-            typeface = Typeface.create(Fonts.currentTypeface(this@SecureInputMethodService), Typeface.NORMAL)
+            typeface = Typeface.create(Fonts.currentTypeface(this@SecureInputMethodService) as Typeface, Typeface.NORMAL)
             setTextColor(
                 if (accented) ThemeUtil.accentColor(this@SecureInputMethodService)
                 else ThemeUtil.textColor(this@SecureInputMethodService)
@@ -1522,7 +1522,7 @@ class SecureInputMethodService : InputMethodService() {
                     setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
                     gravity = Gravity.CENTER
                     includeFontPadding = false
-                    typeface = Typeface.create(Fonts.currentTypeface(this@SecureInputMethodService), Typeface.NORMAL)
+                    typeface = Typeface.create(Fonts.currentTypeface(this@SecureInputMethodService) as Typeface, Typeface.NORMAL)
                     layoutParams = LinearLayout.LayoutParams(chipSizePx, chipSizePx)
                 })
             }
@@ -1759,7 +1759,7 @@ class SecureInputMethodService : InputMethodService() {
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
                 gravity = Gravity.CENTER
                 includeFontPadding = false
-                typeface = Typeface.create(Fonts.currentTypeface(this@SecureInputMethodService), Typeface.NORMAL)
+                typeface = Typeface.create(Fonts.currentTypeface(this@SecureInputMethodService) as Typeface, Typeface.NORMAL)
                 // A saved whole-sentence suggestion gets the accent
                 // color so it visibly reads as "a full phrase you've
                 // typed before", not just another single-word guess.

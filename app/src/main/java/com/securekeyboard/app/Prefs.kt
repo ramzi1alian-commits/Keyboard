@@ -1,3 +1,14 @@
+package com.securekeyboard.app
+
+import android.content.Context
+import android.content.SharedPreferences
+import android.content.res.Configuration
+import android.graphics.Typeface
+import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.StateListDrawable
+import androidx.core.content.ContextCompat
+
 object Prefs {
     private const val FILE = "secure_keyboard_prefs"
     private const val KEY_ACCENT = "accent_color_name"
