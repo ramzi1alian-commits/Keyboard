@@ -29,26 +29,6 @@ object NextWordDictionary {
     private const val ASSET_NAME = "ar_bigrams.tsv"
     private const val MAX_SUGGESTIONS = 3
 
-    // Small, high-confidence Arabic phrase seeds. These are not learned
-    // from the user; they simply cover common completions that a bigram
-    // dictionary cannot express because it only knows one previous word.
-    private val COMMON_PHRASES = listOf(
-        "السلام عليكم ورحمة الله وبركاته",
-        "السلام عليكم ورحمة الله",
-        "وعليكم السلام ورحمة الله وبركاته",
-        "بسم الله الرحمن الرحيم",
-        "الحمد لله رب العالمين",
-        "إن شاء الله",
-        "ما شاء الله",
-        "جزاك الله خيرا",
-        "بارك الله فيك",
-        "صلى الله عليه وسلم",
-        "لا إله إلا الله",
-        "محمد رسول الله",
-        "حسبنا الله ونعم الوكيل",
-        "إنا لله وإنا إليه راجعون"
-    )
-
     @Volatile
     private var table: Map<String, List<String>>? = null
 
@@ -104,22 +84,5 @@ object NextWordDictionary {
         val map = table ?: return emptyList()
         val followers = map[previousWord] ?: return emptyList()
         return if (followers.size <= MAX_SUGGESTIONS) followers else followers.take(MAX_SUGGESTIONS)
-    }
-
-    /**
-     * Returns continuation text for a complete multi-word context. This is
-     * checked before ordinary bigrams so common phrases such as
-     * "السلام عليكم" -> "ورحمة الله وبركاته" work even before the user has
-     * personally typed the phrase once.
-     */
-    fun phraseSuggestionsForContext(context: String, max: Int = 2): List<String> {
-        if (context.isBlank() || max <= 0) return emptyList()
-        val normalized = context.trim()
-        return COMMON_PHRASES.asSequence()
-            .filter { it.startsWith("$normalized ") }
-            .map { it.substring(normalized.length).trim() }
-            .filter { it.isNotEmpty() }
-            .take(max)
-            .toList()
     }
 }

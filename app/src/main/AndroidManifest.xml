@@ -43,6 +43,11 @@
             android:label="@string/encrypt_title" />
 
         <activity
+            android:name=".ContactPairingActivity"
+            android:exported="false"
+            android:label="@string/pairing_title" />
+
+        <activity
             android:name=".AboutActivity"
             android:exported="false"
             android:label="@string/about_title" />

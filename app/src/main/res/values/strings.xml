@@ -133,4 +133,11 @@
     <string name="crypto_panel_sent_toast">تم التشفير والإرسال</string>
     <string name="crypto_panel_encrypting_toast">جارٍ التشفير…</string>
     <string name="crypto_panel_decrypting_toast">جارٍ فك التشفير…</string>
+
+    <!-- Contact pairing / device-bound encryption (added) -->
+    <string name="recipient_passphrase_only">بدون جهة اتصال (كلمة سر فقط)</string>
+    <string name="pairing_title">إضافة جهة اتصال آمنة</string>
+    <string name="pairing_invalid_qr">رمز QR غير صالح</string>
+    <string name="pairing_scan_first">امسح رمز QR الخاص بالطرف الآخر أولًا</string>
+    <string name="pairing_success">تم ربط جهة الاتصال بنجاح</string>
 </resources>

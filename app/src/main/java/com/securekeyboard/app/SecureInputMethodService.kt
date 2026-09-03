@@ -1156,7 +1156,7 @@ class SecureInputMethodService : InputMethodService() {
             // WordDictionary. Only runs in non-sensitive fields, same
             // gate as everything else that touches currentWord's content.
             val correction = if (suggestionsEnabled && Prefs.autocorrectEnabled(this)) {
-                Autocorrect.correct(typedWord) ?: WordDictionary.bestCorrection(typedWord)
+                Autocorrect.correct(typedWord)
             } else null
             if (correction != null) {
                 currentInputConnection?.deleteSurroundingText(typedWord.length, 0)
@@ -1200,7 +1200,7 @@ class SecureInputMethodService : InputMethodService() {
         makeKey(ENTER_GLYPH, weight = weight, heightDp = heightDp, accented = true, a11yLabel = "إدخال", isIconGlyph = true) {
             val typedWord = currentWord.toString()
             val correction = if (suggestionsEnabled && Prefs.autocorrectEnabled(this)) {
-                Autocorrect.correct(typedWord) ?: WordDictionary.bestCorrection(typedWord)
+                Autocorrect.correct(typedWord)
             } else null
             val ic = currentInputConnection
             if (correction != null) {
@@ -1746,10 +1746,7 @@ class SecureInputMethodService : InputMethodService() {
                 ?.trim()
                 ?: ""
             val phraseSuggestions = if (context.isNotEmpty()) {
-                (PhraseDictionary.suggestionsForContext(context, max = 2) +
-                    NextWordDictionary.phraseSuggestionsForContext(context, max = 2))
-                    .distinct()
-                    .take(2)
+                PhraseDictionary.suggestionsForContext(context, max = 2)
                     .map { Suggestion(it, isPhrase = true) }
             } else {
                 emptyList()

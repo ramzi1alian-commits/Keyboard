@@ -66,6 +66,7 @@ class EncryptActivity : AppCompatActivity() {
 
     private lateinit var inputText: EditText
     private lateinit var inputKey: EditText
+    private lateinit var spinnerRecipient: Spinner
     private lateinit var spinnerExpiry: Spinner
     private lateinit var inputCustomMinutes: EditText
     private lateinit var errorText: TextView
@@ -113,6 +114,7 @@ class EncryptActivity : AppCompatActivity() {
 
         inputText = findViewById(R.id.inputText)
         inputKey = findViewById(R.id.inputKey)
+        spinnerRecipient = findViewById(R.id.spinnerRecipient)
         spinnerExpiry = findViewById(R.id.spinnerExpiry)
         inputCustomMinutes = findViewById(R.id.inputCustomMinutes)
         errorText = findViewById(R.id.errorText)
@@ -137,6 +139,19 @@ class EncryptActivity : AppCompatActivity() {
                 inputCustomMinutes.visibility = if (position == CUSTOM_EXPIRY_POSITION) View.VISIBLE else View.GONE
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
+        val noRecipientLabel = getString(R.string.recipient_passphrase_only)
+        val contactNames = ContactStore.listPairedContactNames(this)
+        val recipientOptions = listOf(noRecipientLabel) + contactNames
+        val recipientAdapter = ArrayAdapter(
+            this, R.layout.spinner_item_light_text, recipientOptions
+        )
+        recipientAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item_light_text)
+        spinnerRecipient.adapter = recipientAdapter
+
+        if (contactNames.isEmpty()) {
+            findViewById<TextView>(R.id.noContactsHint)?.visibility = View.VISIBLE
         }
 
         inputKey.addTextChangedListener(object : android.text.TextWatcher {
@@ -174,8 +189,18 @@ class EncryptActivity : AppCompatActivity() {
                     return@setOnClickListener
                 }
                 try {
-                    val expirySeconds = selectedExpirySeconds()
-                    showResult(CryptoEngine.encrypt(textChars, passChars, expirySeconds))
+                    val selectedContact = selectedRecipientContactName()
+                    val resultB64: String
+                    if (selectedContact == null) {
+                        val expirySeconds = selectedExpirySeconds()
+                        resultB64 = CryptoEngine.encrypt(textChars, passChars, expirySeconds)
+                    } else {
+                        val recipientKeyB64 = ContactStore.getPairedContact(this, selectedContact)
+                            ?: throw IllegalStateException("paired contact missing")
+                        val recipientPublicKey = DeviceIdentity.parseContactPublicKey(recipientKeyB64)
+                        resultB64 = CryptoEngineV2.encrypt(textChars, passChars, recipientPublicKey)
+                    }
+                    showResult(resultB64)
                     // The plaintext no longer needs to stay in the input
                     // field once it's been encrypted - clearing it here
                     // reduces how long it sits visible/in memory.
@@ -200,10 +225,18 @@ class EncryptActivity : AppCompatActivity() {
                 if (cipherB64.isBlank()) { showError(getString(R.string.err_no_cipher)); return@setOnClickListener }
                 if (passChars.isEmpty()) { showError(getString(R.string.err_no_key)); return@setOnClickListener }
                 try {
+                    val selectedContact = selectedRecipientContactName()
                     // decrypt() now returns the sensitive plaintext as a
                     // CharArray (see fix note on the function itself)
                     // instead of an unwipeable String.
-                    val plainChars = CryptoEngine.decrypt(cipherB64, passChars)
+                    val plainChars = if (selectedContact == null) {
+                        CryptoEngine.decrypt(cipherB64, passChars)
+                    } else {
+                        val senderKeyB64 = ContactStore.getPairedContact(this, selectedContact)
+                            ?: throw IllegalStateException("paired contact missing")
+                        val senderPublicKey = DeviceIdentity.parseContactPublicKey(senderKeyB64)
+                        CryptoEngineV2.decrypt(cipherB64, passChars, senderPublicKey)
+                    }
                     try {
                         showResult(plainChars)
                     } finally {
@@ -324,6 +357,12 @@ class EncryptActivity : AppCompatActivity() {
     }
 
     /** Reads the expiry Spinner (+ optional custom-minutes field) into a duration in seconds, or null for "never". */
+    private fun selectedRecipientContactName(): String? {
+        val position = spinnerRecipient.selectedItemPosition
+        if (position <= 0) return null
+        return spinnerRecipient.selectedItem as? String
+    }
+
     private fun selectedExpirySeconds(): Long? {
         return when (spinnerExpiry.selectedItemPosition) {
             0 -> null

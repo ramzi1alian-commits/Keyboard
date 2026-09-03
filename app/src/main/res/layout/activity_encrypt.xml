@@ -130,6 +130,33 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginBottom="6dp"
+            android:text="@string/pairing_title"
+            android:textColor="@color/slate_200"
+            android:textSize="13sp" />
+
+        <Spinner
+            android:id="@+id/spinnerRecipient"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_input"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/noContactsHint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:text="@string/recipient_passphrase_only"
+            android:textColor="@color/slate_400"
+            android:textSize="11sp"
+            android:visibility="gone" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="6dp"
             android:text="@string/expiry_label"
             android:textColor="@color/slate_200"
             android:textSize="13sp" />
