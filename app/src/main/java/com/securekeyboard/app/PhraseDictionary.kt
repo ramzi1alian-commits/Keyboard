@@ -24,6 +24,8 @@ object PhraseDictionary {
     private val persistExecutor = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "phrase-dictionary-persist").apply { isDaemon = true }
     }
+    private val persistPending = AtomicBoolean(false)
+    private val persistDirty = AtomicBoolean(false)
 
     fun preload(context: Context) {
         if (!loadStarted.compareAndSet(false, true)) return
@@ -59,26 +61,36 @@ object PhraseDictionary {
         val normalized = context.trim()
         if (normalized.isEmpty() || counts.isEmpty() || max <= 0) return emptyList()
         val prefix = "$normalized "
-        return counts.entries.asSequence()
-            .filter { entry -> entry.key.startsWith(prefix) }
-            .sortedByDescending { it.value }
-            .take(max)
-            .map { it.key.substring(prefix.length).trim() }
-            .filter { it.isNotEmpty() }
-            .toList()
+        val best = ArrayList<Pair<String, Int>>(max)
+        for ((phrase, count) in counts) {
+            if (!phrase.startsWith(prefix)) continue
+            val display = phrase.substring(prefix.length).trim()
+            if (display.isEmpty()) continue
+            var insertAt = best.size
+            while (insertAt > 0 && best[insertAt - 1].second < count) insertAt--
+            if (insertAt < max) {
+                best.add(insertAt, display to count)
+                if (best.size > max) best.removeAt(best.lastIndex)
+            }
+        }
+        return best.map { it.first }
     }
 
     fun suggestionsFor(prefix: String, max: Int = 2): List<String> {
         if (prefix.isEmpty() || counts.isEmpty() || max <= 0) return emptyList()
-        return counts.entries.asSequence()
-            .filter { entry ->
-                val firstWord = entry.key.substringBefore(' ')
-                firstWord.length >= prefix.length && firstWord.startsWith(prefix)
+        val best = ArrayList<Pair<String, Int>>(max)
+        for ((phrase, count) in counts) {
+            val firstWordEnd = phrase.indexOf(' ')
+            val firstWord = if (firstWordEnd >= 0) phrase.substring(0, firstWordEnd) else phrase
+            if (firstWord.length < prefix.length || !firstWord.startsWith(prefix)) continue
+            var insertAt = best.size
+            while (insertAt > 0 && best[insertAt - 1].second < count) insertAt--
+            if (insertAt < max) {
+                best.add(insertAt, phrase to count)
+                if (best.size > max) best.removeAt(best.lastIndex)
             }
-            .sortedByDescending { it.value }
-            .take(max)
-            .map { it.key }
-            .toList()
+        }
+        return best.map { it.first }
     }
 
     fun clear(context: Context) {
@@ -118,32 +130,44 @@ object PhraseDictionary {
     }
 
     private fun persist(context: Context) {
+        persistDirty.set(true)
+        if (!persistPending.compareAndSet(false, true)) return
+        val appContext = context.applicationContext
         persistExecutor.execute {
-            trimIfNeeded()
-            var plainBytes: ByteArray? = null
-            var encryptedBytes: ByteArray? = null
             try {
-                val sb = StringBuilder()
-                for ((phrase, count) in counts) {
-                    sb.append(phrase).append('\t').append(count).append('\n')
+                while (persistDirty.compareAndSet(true, false)) {
+                    trimIfNeeded()
+                    var plainBytes: ByteArray? = null
+                    var encryptedBytes: ByteArray? = null
+                    try {
+                        val sb = StringBuilder()
+                        for ((phrase, count) in counts) {
+                            sb.append(phrase).append('\t').append(count).append('\n')
+                        }
+                        plainBytes = sb.toString().toByteArray(Charsets.UTF_8)
+                        encryptedBytes = LocalStorageCrypto.encrypt(plainBytes)
+                        val target = File(appContext.filesDir, FILE_NAME)
+                        val temp = File(appContext.filesDir, "$FILE_NAME.tmp")
+                        temp.outputStream().use { out ->
+                            out.write(encryptedBytes)
+                            out.flush()
+                        }
+                        if (!temp.renameTo(target)) {
+                            temp.delete()
+                            throw java.io.IOException("atomic dictionary replace failed")
+                        }
+                    } catch (_: Exception) {
+                        // Learning is optional; never break typing.
+                    } finally {
+                        plainBytes?.fill(0)
+                        encryptedBytes?.fill(0)
+                    }
                 }
-                plainBytes = sb.toString().toByteArray(Charsets.UTF_8)
-                encryptedBytes = LocalStorageCrypto.encrypt(plainBytes)
-                val target = File(context.filesDir, FILE_NAME)
-                val temp = File(context.filesDir, "$FILE_NAME.tmp")
-                temp.outputStream().use { out ->
-                    out.write(encryptedBytes)
-                    out.flush()
-                }
-                if (!temp.renameTo(target)) {
-                    temp.delete()
-                    throw java.io.IOException("atomic dictionary replace failed")
-                }
-            } catch (_: Exception) {
-                // Learning is optional; never break typing.
             } finally {
-                plainBytes?.fill(0)
-                encryptedBytes?.fill(0)
+                persistPending.set(false)
+                if (persistDirty.get() && persistPending.compareAndSet(false, true)) {
+                    persist(appContext)
+                }
             }
         }
     }

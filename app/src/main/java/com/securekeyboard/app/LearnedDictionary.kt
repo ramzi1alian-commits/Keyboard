@@ -23,6 +23,8 @@ object LearnedDictionary {
     private val persistExecutor = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "learned-dictionary-persist").apply { isDaemon = true }
     }
+    private val persistPending = AtomicBoolean(false)
+    private val persistDirty = AtomicBoolean(false)
 
     fun preload(context: Context) {
         if (!loadStarted.compareAndSet(false, true)) return
@@ -39,12 +41,20 @@ object LearnedDictionary {
 
     fun suggestionsFor(prefix: String, max: Int = 5): List<String> {
         if (prefix.isEmpty() || counts.isEmpty() || max <= 0) return emptyList()
-        return counts.entries.asSequence()
-            .filter { it.key.length >= prefix.length && it.key.startsWith(prefix) }
-            .sortedByDescending { it.value }
-            .take(max)
-            .map { it.key }
-            .toList()
+        // Keep only the best few matches while scanning instead of sorting
+        // every matching entry. This is substantially cheaper during rapid
+        // typing and produces the same ranking for the requested top N.
+        val best = ArrayList<Pair<String, Int>>(max)
+        for ((word, count) in counts) {
+            if (word.length < prefix.length || !word.startsWith(prefix)) continue
+            var insertAt = best.size
+            while (insertAt > 0 && best[insertAt - 1].second < count) insertAt--
+            if (insertAt < max) {
+                best.add(insertAt, word to count)
+                if (best.size > max) best.removeAt(best.lastIndex)
+            }
+        }
+        return best.map { it.first }
     }
 
     fun clear(context: Context) {
@@ -107,32 +117,47 @@ object LearnedDictionary {
     }
 
     private fun persist(context: Context) {
+        persistDirty.set(true)
+        if (!persistPending.compareAndSet(false, true)) return
+        val appContext = context.applicationContext
         persistExecutor.execute {
-            trimIfNeeded()
-            var plainBytes: ByteArray? = null
-            var encryptedBytes: ByteArray? = null
             try {
-                val sb = StringBuilder()
-                for ((word, count) in counts) {
-                    sb.append(word).append('\t').append(count).append('\n')
+                // Coalesce bursts of learned words into a single encrypted
+                // atomic write. This removes disk/Keystore churn while typing.
+                while (persistDirty.compareAndSet(true, false)) {
+                    trimIfNeeded()
+                    var plainBytes: ByteArray? = null
+                    var encryptedBytes: ByteArray? = null
+                    try {
+                        val sb = StringBuilder()
+                        for ((word, count) in counts) {
+                            sb.append(word).append('\t').append(count).append('\n')
+                        }
+                        plainBytes = sb.toString().toByteArray(Charsets.UTF_8)
+                        encryptedBytes = LocalStorageCrypto.encrypt(plainBytes)
+                        val target = File(appContext.filesDir, FILE_NAME)
+                        val temp = File(appContext.filesDir, "$FILE_NAME.tmp")
+                        temp.outputStream().use { out ->
+                            out.write(encryptedBytes)
+                            out.flush()
+                        }
+                        if (!temp.renameTo(target)) {
+                            temp.delete()
+                            throw java.io.IOException("atomic dictionary replace failed")
+                        }
+                    } catch (_: Exception) {
+                        // Learning is optional; never break typing.
+                    } finally {
+                        plainBytes?.fill(0)
+                        encryptedBytes?.fill(0)
+                    }
                 }
-                plainBytes = sb.toString().toByteArray(Charsets.UTF_8)
-                encryptedBytes = LocalStorageCrypto.encrypt(plainBytes)
-                val target = File(context.filesDir, FILE_NAME)
-                val temp = File(context.filesDir, "$FILE_NAME.tmp")
-                temp.outputStream().use { out ->
-                    out.write(encryptedBytes)
-                    out.flush()
-                }
-                if (!temp.renameTo(target)) {
-                    temp.delete()
-                    throw java.io.IOException("atomic dictionary replace failed")
-                }
-            } catch (_: Exception) {
-                // Learning is optional; never break typing.
             } finally {
-                plainBytes?.fill(0)
-                encryptedBytes?.fill(0)
+                persistPending.set(false)
+                // A learn() may have raced with the final loop check.
+                if (persistDirty.get() && persistPending.compareAndSet(false, true)) {
+                    persist(appContext)
+                }
             }
         }
     }
