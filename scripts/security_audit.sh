@@ -22,7 +22,7 @@ check_present() {
   if grep -qE "$pattern" "$file"; then echo "PASS: $label"; else echo "FAIL: $label"; fail=1; fi
 }
 
-echo "== SecureKeyboard V21 static security audit =="
+echo "== SecureKeyboard V23 static security audit =="
 check_present 'android:allowBackup="false"' "$MANIFEST" "Android backup disabled"
 check_present 'android:usesCleartextTraffic="false"' "$MANIFEST" "Cleartext traffic disabled"
 check_present 'android:networkSecurityConfig=' "$MANIFEST" "Network Security Config attached"
