@@ -5,7 +5,7 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <!--
-        IMPORTANT: This app requests NO permissions at all.
+        SECURITY NOTE: This app requests CAMERA only for the local QR scanner.
         Specifically, android.permission.INTERNET is NOT declared here.
         Android enforces network access at install time based on this manifest -
         an app with no INTERNET permission is physically unable to open a socket,

@@ -40,7 +40,9 @@ jobs:
           gradle-version: '8.7'
 
       - name: Static security audit
-        run: ./scripts/security_audit.sh
+        run: |
+          chmod +x scripts/security_audit.sh
+          bash scripts/security_audit.sh
 
       - name: Build debug APK
         run: gradle --no-daemon :app:assembleDebug

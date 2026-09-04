@@ -45,19 +45,14 @@ class SecureFileReceiveActivity : Activity() {
         findViewById<Button>(R.id.receive_decrypt_btn).setOnClickListener { beginDecrypt() }
         findViewById<Button>(R.id.receive_close_btn).setOnClickListener { finish() }
 
-        inputUri = extractInputUri(intent)
+        inputUri = SecurityIntentValidator.encryptedFileUri(intent)
+        if (inputUri == null) {
+            statusText.text = "رابط أو ملف غير صالح"
+            findViewById<Button>(R.id.receive_decrypt_btn).isEnabled = false
+        }
         selectedText.text = queryDisplayName(inputUri) ?: "ملف مشفر"
         refreshContacts()
         refreshSessionStatus()
-    }
-
-    private fun extractInputUri(source: Intent?): android.net.Uri? {
-        if (source == null) return null
-        val direct = source.data
-        if (direct != null) return direct
-        val clip = source.clipData
-        if (clip != null && clip.itemCount > 0) return clip.getItemAt(0).uri
-        return source.getParcelableExtra(Intent.EXTRA_STREAM)
     }
 
     private fun refreshContacts() {

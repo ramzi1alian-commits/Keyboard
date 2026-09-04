@@ -2,8 +2,6 @@ package com.securekeyboard.app
 
 import android.content.Context
 import android.os.SystemClock
-import java.nio.ByteBuffer
-import java.util.Arrays
 
 /**
  * Short-lived session passphrase.
@@ -56,7 +54,7 @@ object SessionKeyStore {
                         (expiresWall - System.currentTimeMillis()).coerceAtLeast(1L)
                 }
             } finally {
-                Arrays.fill(plain, 0)
+                SecureMemory.wipe(plain)
             }
         } catch (_: Exception) {
             prefs.edit().remove(BLOB).remove(EXPIRES_WALL).apply()
@@ -87,9 +85,9 @@ object SessionKeyStore {
                     .putString(BLOB, b64)
                     .putLong(EXPIRES_WALL, expiresAtWallMs)
                     .apply()
-                Arrays.fill(encrypted, 0)
+                SecureMemory.wipe(encrypted)
             } finally {
-                Arrays.fill(plain, 0)
+                SecureMemory.wipe(plain)
             }
         } catch (_: Exception) {
             // If persistence fails, keep the secure in-memory session alive.
@@ -109,7 +107,7 @@ object SessionKeyStore {
     }
 
     @Synchronized
-    fun isActive(): Boolean = get()?.also { Arrays.fill(it, '\u0000') } != null
+    fun isActive(): Boolean = get()?.also { SecureMemory.wipe(it) } != null
 
     @Synchronized
     fun remainingMinutes(): Long {
@@ -127,7 +125,7 @@ object SessionKeyStore {
 
     @Synchronized
     fun clear() {
-        passphrase?.let { Arrays.fill(it, '\u0000') }
+        passphrase?.let { SecureMemory.wipe(it) }
         passphrase = null
         expiresAtElapsedMs = 0L
         expiresAtWallMs = 0L

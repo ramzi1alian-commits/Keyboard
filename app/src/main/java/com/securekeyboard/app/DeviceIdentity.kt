@@ -37,6 +37,7 @@ object DeviceIdentity {
     private const val CURVE = "secp256r1"
     private const val IDENTITY_FILE = "device_identity_v14.enc"
     private const val MAX_KEY_BYTES = 4096
+    private const val FORMAT_VERSION = 1
 
     @Synchronized
     private fun getOrCreateKeyPair(context: Context): KeyPair {
@@ -47,8 +48,10 @@ object DeviceIdentity {
                 val plain = LocalStorageCrypto.decrypt(encrypted)
                 if (plain != null) {
                     try {
-                        if (plain.size >= 12) {
+                        if (plain.size >= 16) {
                             val buf = ByteBuffer.wrap(plain)
+                            val format = buf.int
+                            require(format == FORMAT_VERSION)
                             val publicLen = buf.int
                             if (publicLen in 1..MAX_KEY_BYTES && buf.remaining() >= publicLen + 4) {
                                 val publicBytes = ByteArray(publicLen)
@@ -84,14 +87,26 @@ object DeviceIdentity {
         val pair = generator.generateKeyPair()
         val pub = pair.public.encoded
         val priv = pair.private.encoded
-        val plain = ByteBuffer.allocate(4 + pub.size + 4 + priv.size)
-            .putInt(pub.size).put(pub)
+        val plain = ByteBuffer.allocate(4 + 4 + pub.size + 4 + priv.size)
+            .putInt(FORMAT_VERSION).putInt(pub.size).put(pub)
             .putInt(priv.size).put(priv)
             .array()
         try {
-            file.writeBytes(LocalStorageCrypto.encrypt(plain))
+            val encrypted = LocalStorageCrypto.encrypt(plain)
+            try {
+                val tmp = File(context.filesDir, "$IDENTITY_FILE.tmp")
+                tmp.writeBytes(encrypted)
+                if (!tmp.renameTo(file)) {
+                    tmp.delete()
+                    throw IllegalStateException("atomic identity commit failed")
+                }
+            } finally {
+                SecureMemory.wipe(encrypted)
+            }
         } finally {
-            Arrays.fill(plain, 0)
+            SecureMemory.wipe(plain)
+            SecureMemory.wipe(pub)
+            SecureMemory.wipe(priv)
         }
         return pair
     }
@@ -101,6 +116,7 @@ object DeviceIdentity {
 
     fun parseContactPublicKey(base64: String): PublicKey {
         val bytes = Base64.decode(base64, Base64.NO_WRAP)
+        require(bytes.size in 50..MAX_KEY_BYTES) { "invalid public key size" }
         return try {
             KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(bytes))
         } finally {
