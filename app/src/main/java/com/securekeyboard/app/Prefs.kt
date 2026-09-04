@@ -17,6 +17,7 @@ object Prefs {
     private const val KEY_DENSITY = "density"
     private const val KEY_KEYBOARD_HEIGHT = "keyboard_height_dp"
     private const val KEY_AUTOCORRECT = "autocorrect_enabled"
+    private const val KEY_RETURN_TO_CRYPTO = "return_to_crypto"
 
     // Preferences here are only UI/configuration state, not secrets.  The
     // performance fix is to keep ONE process-local SharedPreferences handle
@@ -115,6 +116,21 @@ object Prefs {
     fun setAutocorrectEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit()
             .putBoolean(KEY_AUTOCORRECT, enabled).apply()
+    }
+
+
+    /** UI-only handoff flag used when the keyboard temporarily opens the
+     * separate encryption/composition Activity. It contains no sensitive
+     * text; it only tells a recreated IME which page to restore. */
+    fun markReturnToCrypto(context: Context) {
+        prefs(context).edit().putBoolean(KEY_RETURN_TO_CRYPTO, true).apply()
+    }
+
+    fun consumeReturnToCrypto(context: Context): Boolean {
+        val p = prefs(context)
+        val value = p.getBoolean(KEY_RETURN_TO_CRYPTO, false)
+        if (value) p.edit().remove(KEY_RETURN_TO_CRYPTO).apply()
+        return value
     }
 
     // 0 = default sans-serif, 1 = serif, 2 = monospace

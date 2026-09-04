@@ -116,7 +116,10 @@
     <string name="session_key_cleared_toast">تم مسح مفتاح الجلسة</string>
 
     <string name="crypto_panel_title">التشفير السريع</string>
-    <string name="crypto_panel_no_session">فعّل مفتاح جلسة أولا من شاشة التشفير الكاملة</string>
+    <string name="crypto_panel_no_session">لا يوجد مفتاح جلسة نشط أو انتهت صلاحيته. فعّل مفتاح الجلسة أولًا من شاشة التشفير الكاملة.</string>
+    <string name="crypto_panel_choose_contact_first">يجب اختيار جهة اتصال آمنة أولًا لتشفير الملف. اضغط 👥 واختر جهة اتصال.</string>
+    <string name="crypto_panel_contact_key_missing">مفتاح جهة الاتصال غير موجود. أعد ربط جهة الاتصال ثم حاول مرة أخرى.</string>
+    <string name="crypto_panel_contact_key_invalid">مفتاح جهة الاتصال غير صالح. أعد ربط جهة الاتصال ثم حاول مرة أخرى.</string>
     <string name="crypto_panel_encrypt_btn">شفّر النص الحالي واحقنه</string>
     <string name="crypto_panel_decrypt_btn">افحص الحافظة وفك التشفير</string>
     <string name="crypto_panel_empty_field_toast">الحقل فارغ، مفيش نص تشفّره</string>

@@ -708,6 +708,19 @@ class SecureInputMethodService : InputMethodService() {
         }
         root.addView(composeDesc)
 
+        // File encryption belongs to this same encryption window as agreed:
+        // the dedicated file tool opens from here, while the paperclip in
+        // secure-compose remains the quick attach-and-encrypt path.
+        val fileRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        fileRow.addView(makeKey("📁 تشفير الملفات", weight = 1f, heightDp = heightDp, accented = sessionActive) {
+            if (!SessionKeyStore.isActive()) {
+                android.widget.Toast.makeText(this@SecureInputMethodService, R.string.crypto_panel_no_session, android.widget.Toast.LENGTH_LONG).show()
+            } else {
+                openSecureFileCrypto()
+            }
+        })
+        root.addView(fileRow)
+
         val encryptRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         encryptRow.addView(makeKey(getString(R.string.crypto_panel_encrypt_btn), weight = 1f, heightDp = heightDp, accented = sessionActive) {
             encryptFieldAndInject()
@@ -722,9 +735,13 @@ class SecureInputMethodService : InputMethodService() {
 
         val popupRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         popupRow.addView(makeKey(getString(R.string.crypto_panel_open_popup_btn), weight = 1f, heightDp = heightDp) {
+            // Remember only the UI page, not the draft/plaintext. This survives
+            // an IME recreation while the separate Activity is open, so returning
+            // from it does not drop the user to the normal keyboard/home screen.
+            Prefs.markReturnToCrypto(this@SecureInputMethodService)
             val intent = Intent(this@SecureInputMethodService, EncryptActivity::class.java).apply {
                 putExtra(EncryptActivity.EXTRA_POPUP_MODE, true)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_HISTORY)
             }
             startActivity(intent)
         })
@@ -881,7 +898,13 @@ class SecureInputMethodService : InputMethodService() {
     }
 
     private fun openSecureFileCrypto() {
-        val intent = Intent(this, FileCryptoActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        // Preserve the crypto keyboard page while the standalone file tool
+        // is on screen. Only the page flag is persisted; no plaintext/draft
+        // is written to disk.
+        Prefs.markReturnToCrypto(this)
+        val intent = Intent(this, FileCryptoActivity::class.java).addFlags(
+            Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_HISTORY
+        )
         selectedSecureContact?.let { intent.putExtra(FileCryptoActivity.EXTRA_CONTACT_NAME, it) }
         startActivity(intent)
     }
@@ -1093,9 +1116,15 @@ class SecureInputMethodService : InputMethodService() {
                         val flags = InputConnection.INPUT_CONTENT_GRANT_READ_URI_PERMISSION
                         val accepted = ic.commitContent(info, flags, null)
                         if (!accepted) {
-                            android.widget.Toast.makeText(this, "واتساب/التطبيق المفتوح لم يقبل إرفاق الملف من لوحة المفاتيح", android.widget.Toast.LENGTH_LONG).show()
+                            // Many chat editors do not advertise application/octet-stream
+                            // through commitContent even though they can receive files
+                            // through the Android Sharesheet. Do not pretend the file was
+                            // sent: fall back to the system share UI so the user can choose
+                            // WhatsApp and then press its normal Send button.
+                            cryptoBusy = false
+                            shareEncryptedAttachment(outFile!!, displayName)
                         } else {
-                            android.widget.Toast.makeText(this, "تم إرفاق الملف المشفّر — الأصل محفوظ", android.widget.Toast.LENGTH_SHORT).show()
+                            android.widget.Toast.makeText(this, "تم إدراج الملف المشفّر في المحادثة — اضغط إرسال في واتساب لإرساله، والأصل محفوظ", android.widget.Toast.LENGTH_LONG).show()
                             selectedAttachmentUri = null
                             selectedAttachmentName = ""
                             rebuildKeyboardView()
@@ -1113,6 +1142,22 @@ class SecureInputMethodService : InputMethodService() {
             } finally {
                 java.util.Arrays.fill(passphrase, ' ')
             }
+        }
+    }
+
+    private fun shareEncryptedAttachment(file: java.io.File, originalName: String) {
+        try {
+            val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+            val share = Intent(Intent.ACTION_SEND).apply {
+                type = "application/octet-stream"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_TEXT, "SecureKeyboard — ملف مشفّر: $originalName")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(share, "اختر التطبيق لإرسال الملف المشفّر").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            android.widget.Toast.makeText(this, "اختر واتساب من المشاركة ثم اضغط إرسال. الملف الأصلي محفوظ.", android.widget.Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            android.widget.Toast.makeText(this, "تعذر فتح مشاركة الملف المشفّر: ${e.message ?: "خطأ"}", android.widget.Toast.LENGTH_LONG).show()
         }
     }
 
@@ -1518,13 +1563,19 @@ class SecureInputMethodService : InputMethodService() {
 
     private fun deleteKey(heightDp: Int, weight: Float = 1.5f) =
         makeKey(BACKSPACE_GLYPH, weight = weight, heightDp = heightDp, accented = true, repeatable = true, a11yLabel = "حذف", isIconGlyph = true) {
-            currentInputConnection?.deleteSurroundingText(1, 0)
-            // Was: just chop the last char off currentWord, which left
-            // the buffer permanently empty (suggestions stuck off) the
-            // moment backspace crossed back over a space into a word
-            // that was already finished. Re-deriving from the field
-            // instead brings that whole word back, exactly as it was
-            // typed - see resyncCurrentWordFromField().
+            val ic = currentInputConnection
+            // Android editors treat a selected range differently from a
+            // normal backspace. commitText("", 1) replaces the current
+            // selection with nothing, so selecting a paragraph and pressing
+            // our delete key really deletes the selection instead of doing
+            // nothing. With no selection we fall back to one-character
+            // backspace.
+            val selected = try { ic?.getSelectedText(0)?.length ?: 0 } catch (_: Exception) { 0 }
+            if (selected > 0) {
+                ic?.commitText("", 1)
+            } else {
+                ic?.deleteSurroundingText(1, 0)
+            }
             lastFinishedWord = null
             resyncCurrentWordFromField()
         }
@@ -1935,7 +1986,11 @@ class SecureInputMethodService : InputMethodService() {
         // dump the user on the plain letters page instead of the crypto
         // menu they came from. Only the explicit "رجوع"/"ابجد" button on
         // each respective screen turns its stickiness off.
-        val cameFromOverlay = showingSymbols || showingEmoji || showingCrypto || showingSecureCompose
+        val restoreCrypto = Prefs.consumeReturnToCrypto(this)
+        if (restoreCrypto) {
+            cryptoMenuSticky = true
+        }
+        val cameFromOverlay = showingSymbols || showingEmoji || showingCrypto || showingSecureCompose || restoreCrypto
         showingSymbols = false
         showingEmoji = false
         // Sensitive plaintext from a previous decrypt never survives a
