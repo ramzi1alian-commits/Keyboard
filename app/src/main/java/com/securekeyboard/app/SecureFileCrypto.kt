@@ -13,7 +13,6 @@ import java.security.PublicKey
 import java.security.SecureRandom
 import java.util.Arrays
 import javax.crypto.Cipher
-import javax.crypto.CipherInputStream
 import javax.crypto.CipherOutputStream
 import javax.crypto.Mac
 import javax.crypto.spec.GCMParameterSpec
@@ -70,57 +69,61 @@ object SecureFileCrypto {
         val key = deriveKey(context, contactPublicKey, passphrase)
         val metaIv = ByteArray(IV_LENGTH).also { SecureRandom().nextBytes(it) }
         val contentIv = ByteArray(IV_LENGTH).also { SecureRandom().nextBytes(it) }
-        val filename = (displayName ?: "encrypted_file").ifBlank { "encrypted_file" }
-        val filenameBytes = filename.toByteArray(Charsets.UTF_8)
-        require(filenameBytes.size <= 4096) { "filename too long" }
+        var header = ByteArray(0)
+        var metaCipher = ByteArray(0)
+        try {
+            val filename = (displayName ?: "encrypted_file").ifBlank { "encrypted_file" }
+            val filenameBytes = filename.toByteArray(Charsets.UTF_8)
+            require(filenameBytes.size <= 4096) { "filename too long" }
+            try {
+                header = ByteBuffer.allocate(HEADER_LENGTH)
+                    .put(MAGIC)
+                    .put(VERSION)
+                    .put(metaIv)
+                    .put(contentIv)
+                    .putInt(0)
+                    .array()
+                metaCipher = aesGcmEncrypt(key, metaIv, header.copyOf(HEADER_LENGTH - 4), filenameBytes)
+            } finally {
+                Arrays.fill(filenameBytes, 0)
+            }
+            require(metaCipher.size <= MAX_METADATA_CIPHER)
+            ByteBuffer.wrap(header, HEADER_LENGTH - 4, 4).putInt(metaCipher.size)
 
-        val header = ByteBuffer.allocate(HEADER_LENGTH)
-            .put(MAGIC)
-            .put(VERSION)
-            .put(metaIv)
-            .put(contentIv)
-            .putInt(0) // replaced after metadata ciphertext is known
-            .array()
-        val metaCipher = try {
-            aesGcmEncrypt(key, metaIv, header.copyOf(HEADER_LENGTH - 4), filenameBytes)
-        } finally {
-            Arrays.fill(filenameBytes, 0)
-        }
-        require(metaCipher.size <= MAX_METADATA_CIPHER)
-        ByteBuffer.wrap(header, HEADER_LENGTH - 4, 4).putInt(metaCipher.size)
-
-        context.contentResolver.openInputStream(input).use { rawIn ->
-            require(rawIn != null) { "cannot open input" }
-            context.contentResolver.openOutputStream(output).use { rawOut ->
-                require(rawOut != null) { "cannot open output" }
-                BufferedInputStream(rawIn, BUFFER_SIZE).use { inputStream ->
-                    BufferedOutputStream(rawOut, BUFFER_SIZE).use { outputStream ->
-                        outputStream.write(header)
-                        outputStream.write(metaCipher)
-                        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-                        cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, contentIv))
-                        cipher.updateAAD(header + metaCipher)
-                        CipherOutputStream(outputStream, cipher).use { encryptedOut ->
-                            val buffer = ByteArray(BUFFER_SIZE)
-                            try {
-                                while (true) {
-                                    val read = inputStream.read(buffer)
-                                    if (read < 0) break
-                                    encryptedOut.write(buffer, 0, read)
+            context.contentResolver.openInputStream(input).use { rawIn ->
+                require(rawIn != null) { "cannot open input" }
+                context.contentResolver.openOutputStream(output).use { rawOut ->
+                    require(rawOut != null) { "cannot open output" }
+                    BufferedInputStream(rawIn, BUFFER_SIZE).use { inputStream ->
+                        BufferedOutputStream(rawOut, BUFFER_SIZE).use { outputStream ->
+                            outputStream.write(header)
+                            outputStream.write(metaCipher)
+                            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+                            cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, contentIv))
+                            cipher.updateAAD(header + metaCipher)
+                            CipherOutputStream(outputStream, cipher).use { encryptedOut ->
+                                val buffer = ByteArray(BUFFER_SIZE)
+                                try {
+                                    while (true) {
+                                        val read = inputStream.read(buffer)
+                                        if (read < 0) break
+                                        encryptedOut.write(buffer, 0, read)
+                                    }
+                                } finally {
+                                    Arrays.fill(buffer, 0)
                                 }
-                            } finally {
-                                Arrays.fill(buffer, 0)
                             }
                         }
                     }
                 }
             }
+        } finally {
+            Arrays.fill(key, 0)
+            Arrays.fill(metaIv, 0)
+            Arrays.fill(contentIv, 0)
+            Arrays.fill(header, 0)
+            Arrays.fill(metaCipher, 0)
         }
-        Arrays.fill(key, 0)
-        Arrays.fill(metaIv, 0)
-        Arrays.fill(contentIv, 0)
-        Arrays.fill(header, 0)
-        Arrays.fill(metaCipher, 0)
     }
 
     /** Decrypts to a private temporary file first, then caller may copy it after authentication succeeds. */
@@ -149,20 +152,31 @@ object SecureFileCrypto {
                     val cipher = Cipher.getInstance("AES/GCM/NoPadding")
                     cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, contentIv))
                     cipher.updateAAD(header + metaCipher)
-                    CipherInputStream(inputStream, cipher).use { encryptedIn ->
-                        FileOutputStream(temp).use { rawOut ->
-                            BufferedOutputStream(rawOut, BUFFER_SIZE).use { out ->
-                                val buffer = ByteArray(BUFFER_SIZE)
-                                try {
-                                    while (true) {
-                                        val read = encryptedIn.read(buffer)
-                                        if (read < 0) break
-                                        out.write(buffer, 0, read)
+                    FileOutputStream(temp).use { rawOut ->
+                        BufferedOutputStream(rawOut, BUFFER_SIZE).use { out ->
+                            val buffer = ByteArray(BUFFER_SIZE)
+                            try {
+                                while (true) {
+                                    val read = inputStream.read(buffer)
+                                    if (read < 0) break
+                                    val plain = cipher.update(buffer, 0, read)
+                                    if (plain != null && plain.isNotEmpty()) {
+                                        out.write(plain)
+                                        Arrays.fill(plain, 0)
                                     }
-                                    out.flush()
-                                } finally {
-                                    Arrays.fill(buffer, 0)
                                 }
+                                // GCM authentication is finalized explicitly. This is intentional:
+                                // unlike CipherInputStream, authentication failure cannot be hidden
+                                // behind a stream EOF/close path. Any unauthenticated temp plaintext
+                                // is deleted by the outer catch block.
+                                val finalPlain = cipher.doFinal()
+                                if (finalPlain.isNotEmpty()) {
+                                    out.write(finalPlain)
+                                    Arrays.fill(finalPlain, 0)
+                                }
+                                out.flush()
+                            } finally {
+                                Arrays.fill(buffer, 0)
                             }
                         }
                     }

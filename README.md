@@ -362,3 +362,9 @@ New message encryption uses a conservative Argon2id memory profile suitable for 
 - The receive screen requires the paired contact and an active session key, decrypts to a private temporary file, then lets the user choose a destination folder.
 - The original encrypted file is never modified and plaintext is not placed in the clipboard.
 - The receive activity uses `FLAG_SECURE` and only this dedicated handler is exported; the core keyboard and crypto screens remain private.
+
+
+## V20 High-Assurance Foundation
+V20 adds an automated security gate (`scripts/security_audit.sh`), explicit cleartext-traffic denial, stronger cleanup on file-encryption failures, and a documented security/release boundary. See `V20_HIGH_ASSURANCE_SECURITY_FOUNDATION.md` and `V20_RELEASE_SECURITY_CHECKLIST.md`.
+
+V20 is **not** a military/FIPS certification. It is an engineering foundation intended to be suitable for independent high-assurance security review.

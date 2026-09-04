@@ -137,10 +137,10 @@ class ContactPairingActivity : AppCompatActivity() {
         val sorted = listOf(keyA, keyB).sorted()
         val digest = MessageDigest.getInstance("SHA-256")
             .digest((sorted[0] + sorted[1]).toByteArray(Charsets.UTF_8))
-        // Take the first 6 bytes -> 6 groups of 2 digits, easy to read aloud
+        // Take the first 6 bytes -> 6 fixed-width hexadecimal groups, easy to compare
         val sb = StringBuilder()
         for (i in 0 until 6) {
-            sb.append(String.format("%02d", digest[i].toInt() and 0xFF))
+            sb.append(String.format("%02X", digest[i].toInt() and 0xFF))
             if (i != 5) sb.append(" ")
         }
         return sb.toString()

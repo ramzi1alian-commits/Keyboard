@@ -17,8 +17,8 @@ android {
         applicationId "com.securekeyboard.pro"
         minSdk 24
         targetSdk 34
-        versionCode 8
-        versionName "2.6"
+        versionCode 11
+        versionName "2.9"
     }
 
     signingConfigs {
@@ -75,6 +75,11 @@ dependencies {
     // time, which makes GPU/ASIC brute-forcing far more expensive than
     // PBKDF2 at an equivalent "iteration count".
     implementation 'org.bouncycastle:bcprov-jdk18on:1.78.1'
+
+    // V21 adversarial/instrumented crypto tests.
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'androidx.test:rules:1.6.1'
     // Intentionally NO networking libraries (no OkHttp, Retrofit, etc).
     // This app never requests android.permission.INTERNET in the manifest,
     // so the OS itself blocks any network access at install time -

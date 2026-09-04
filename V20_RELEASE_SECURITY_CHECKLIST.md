@@ -1,0 +1,21 @@
+# V20 Release Security Checklist
+
+- [x] No INTERNET permission
+- [x] Cleartext traffic explicitly disabled
+- [x] Android backup disabled + exclusion rules
+- [x] FileProvider non-exported
+- [x] Internal activities non-exported
+- [x] IME protected by BIND_INPUT_METHOD
+- [x] AES-GCM used for authenticated encryption
+- [x] Argon2id used for passphrase KDF
+- [x] GCM authentication explicitly finalized for SKF decryption
+- [x] Temporary decrypted files removed on failure/destroy
+- [x] Unicode-safe backspace path
+- [x] Filename sanitization
+- [x] Static security audit added to CI
+- [ ] Independent penetration test
+- [ ] Fuzzing of SKF parser and external intents
+- [ ] Forward Secrecy protocol
+- [ ] API 36 / Android 16 compatibility validation
+- [ ] Independent cryptographic review
+- [ ] Formal certification/validation (if required)

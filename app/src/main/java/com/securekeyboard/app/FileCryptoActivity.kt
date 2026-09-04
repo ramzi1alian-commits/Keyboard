@@ -140,7 +140,8 @@ class FileCryptoActivity : AppCompatActivity() {
                 // operation can still proceed while this activity is alive.
             }
             val input = selectedInputUri ?: return
-            val name = if (pendingOperation == 1) "$selectedDisplayName.skf" else "decrypted_$selectedDisplayName"
+            val safeInputName = sanitizeFilename(selectedDisplayName)
+            val name = if (pendingOperation == 1) "$safeInputName.skf" else "decrypted_$safeInputName"
             val output = try {
                 DocumentsContract.buildDocumentUriUsingTree(
                     treeUri,
@@ -241,6 +242,20 @@ class FileCryptoActivity : AppCompatActivity() {
                 Arrays.fill(pass, '\u0000')
             }
         }.start()
+    }
+
+    private fun sanitizeFilename(value: String): String {
+        val normalized = value
+            .replace('\\', '_')
+            .replace('/', '_')
+            .replace(Regex("[\\u0000-\\u001F\\u007F]"), "_")
+            .trim()
+        val safe = normalized.trim('.', ' ')
+        return when {
+            safe.isBlank() -> "file"
+            safe.length > 180 -> safe.take(180)
+            else -> safe
+        }
     }
 
     private fun queryDisplayName(uri: Uri): String? {

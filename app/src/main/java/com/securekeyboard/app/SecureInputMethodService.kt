@@ -1574,7 +1574,14 @@ class SecureInputMethodService : InputMethodService() {
             if (selected > 0) {
                 ic?.commitText("", 1)
             } else {
-                ic?.deleteSurroundingText(1, 0)
+                // API 24+: delete one Unicode code point rather than one UTF-16
+                // code unit, so emoji/supplementary characters are not split.
+                try {
+                    ic?.deleteSurroundingTextInCodePoints(1, 0)
+                } catch (_: Exception) {
+                    // OEM/editor fallback for unusual InputConnection implementations.
+                    ic?.deleteSurroundingText(1, 0)
+                }
             }
             lastFinishedWord = null
             resyncCurrentWordFromField()
