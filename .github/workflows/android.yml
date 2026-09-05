@@ -2,17 +2,20 @@ name: Android CI
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches:
+      - main
   pull_request:
-    branches: [ "main", "master" ]
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+
   build:
-    name: Build Debug APK
+    name: Build APK and Security Audit
     runs-on: ubuntu-latest
 
     steps:
@@ -24,7 +27,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -32,7 +34,10 @@ jobs:
       - name: Install Android SDK packages
         run: |
           yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-34" \
+            "build-tools;34.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -44,28 +49,49 @@ jobs:
           chmod +x scripts/security_audit.sh
           bash scripts/security_audit.sh
 
-      - name: Build debug APK
-        run: gradle --no-daemon :app:assembleDebug
+      - name: Android security hardening audit
+        if: ${{ hashFiles('scripts/security_hardening_audit.sh') != '' }}
+        run: |
+          chmod +x scripts/security_hardening_audit.sh
+          bash scripts/security_hardening_audit.sh
 
-      - name: Upload APK
+      - name: Crypto key management audit
+        if: ${{ hashFiles('scripts/crypto_key_management_audit.sh') != '' }}
+        run: |
+          chmod +x scripts/crypto_key_management_audit.sh
+          bash scripts/crypto_key_management_audit.sh
+
+      - name: Build debug APK
+        run: |
+          gradle --no-daemon :app:assembleDebug
+
+      - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: SecureKeyboard-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+          retention-days: 14
 
-      - name: Upload mapping (if generated)
+      - name: Upload security reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: SecureKeyboard-build-reports
+          name: security-audit-reports
           path: |
+            security-report.txt
+            security-report.json
+            build/reports/**
             app/build/reports/**
-            app/build/outputs/mapping/**
           if-no-files-found: ignore
+          retention-days: 14
+
 
   adversarial-tests:
     name: Adversarial Crypto Tests (Android Emulator)
     runs-on: ubuntu-latest
+    needs: build
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -75,7 +101,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -83,8 +108,12 @@ jobs:
       - name: Install Android SDK packages
         run: |
           yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" "emulator" "system-images;android-34;google_apis;x86_64"
-          echo "no" | avdmanager create avd -n v21-test -k "system-images;android-34;google_apis;x86_64" --force
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-34" \
+            "build-tools;34.0.0" \
+            "emulator" \
+            "system-images;android-34;default;x86_64"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -95,9 +124,36 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
-          target: google_apis
+          target: default
           arch: x86_64
           profile: pixel_2
-          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
+          avd-name: test
+          force-avd-creation: false
+          cores: 2
+          emulator-port: 5554
+          emulator-boot-timeout: 900
+          emulator-options: >-
+            -no-window
+            -no-audio
+            -no-boot-anim
+            -gpu swiftshader_indirect
+            -no-snapshot
+            -no-metrics
           disable-animations: true
-          script: gradle --no-daemon :app:connectedDebugAndroidTest
+          disable-spellchecker: false
+          disable-linux-hw-accel: true
+          enable-hw-keyboard: false
+          channel: stable
+          script: |
+            gradle --no-daemon :app:connectedDebugAndroidTest
+
+      - name: Upload instrumentation test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: adversarial-test-reports
+          path: |
+            app/build/outputs/androidTest-results/**
+            app/build/reports/androidTests/**
+          if-no-files-found: ignore
+          retention-days: 14
