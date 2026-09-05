@@ -510,9 +510,9 @@ class SecureInputMethodService : InputMethodService() {
             // before - only sizing (dp instead of raw px) and background
             // styling were touched in that earlier pass.
             rows = listOf(
-                "ض ص ث ق ف غ ع ه خ ح ج د",
-                "ش س ي ب ل ا ت ن م ك ط ذ",
-                "ئ ء ؤ ر لا ى ة و ز ظ"
+                "ض ص ث ق ف غ ع ه خ ح ج",
+                "ش س ي ب ل ا ت ن م ك ة",
+                "؛ ظ ط ذ د ز ر و ؤ"
             )
         } else {
             rows = if (englishShiftOn) ENGLISH_ROWS_UPPER else ENGLISH_ROWS_LOWER
@@ -1001,9 +1001,9 @@ class SecureInputMethodService : InputMethodService() {
         val isArabic = letterMode == LetterMode.ARABIC
         val rows = if (isArabic) {
             listOf(
-                "ض ص ث ق ف غ ع ه خ ح ج د",
-                "ش س ي ب ل ا ت ن م ك ط ذ",
-                "ئ ء ؤ ر لا ى ة و ز ظ"
+                "ض ص ث ق ف غ ع ه خ ح ج",
+                "ش س ي ب ل ا ت ن م ك ة",
+                "؛ ظ ط ذ د ز ر و ؤ"
             )
         } else {
             if (englishShiftOn) ENGLISH_ROWS_UPPER else ENGLISH_ROWS_LOWER
