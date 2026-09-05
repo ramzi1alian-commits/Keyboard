@@ -84,7 +84,6 @@ jobs:
         run: |
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" "emulator" "system-images;android-34;google_apis;x86_64"
-          echo "no" | avdmanager create avd -n v21-test -k "system-images;android-34;google_apis;x86_64" --force
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -95,12 +94,15 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
-          target: default
+          target: google_apis
           arch: x86_64
           profile: pixel_2
-          force-avd-creation: false
-          emulator-boot-timeout: 900
-          disable-linux-hw-accel: true
-          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -no-metrics
+          force-avd-creation: true
+          emulator-boot-timeout: 600
+          disable-linux-hw-accel: false
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot-load -no-snapshot-save -no-metrics -wipe-data
           disable-animations: true
-          script: gradle --no-daemon :app:connectedDebugAndroidTest
+          script: |
+            adb shell getprop ro.build.version.sdk
+            adb shell getprop ro.kernel.qemu
+            gradle --no-daemon :app:connectedDebugAndroidTest
