@@ -260,8 +260,14 @@ class SecureInputMethodService : InputMethodService() {
             val uri = intent.getParcelableExtra<Uri>(AttachmentPickerActivity.EXTRA_URI) ?: return
             selectedAttachmentUri = uri
             selectedAttachmentName = intent.getStringExtra(AttachmentPickerActivity.EXTRA_NAME).orEmpty().ifBlank { "file" }
-            selectedAttachmentMime = intent.getStringExtra(AttachmentPickerActivity.EXTRA_MIME).orEmpty().ifBlank { "application/octet-stream" }
+            selectedAttachmentMime = "application/octet-stream"
             rebuildKeyboardView()
+            // Android 14 can keep the IME hidden after DocumentsUI returns.
+            // Ask the system to show this IME again after the bridge Activity
+            // has finished, without changing the selected target field.
+            mainHandler.postDelayed({
+                try { requestShowSelf(android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT) } catch (_: Exception) {}
+            }, 180L)
         }
     }
     private var contactPopup: PopupWindow? = null
@@ -291,6 +297,10 @@ class SecureInputMethodService : InputMethodService() {
     // CharArray CryptoEngine.decrypt() returns is converted once here
     // and immediately zeroed (see buildCryptoPage's decrypt handler).
     private var cryptoDecryptedText: String? = null
+    // Persistent operation status shown inside secure-compose. Toasts are
+    // transient and can be missed while Android 14 switches between the
+    // document picker and the IME; this view gives the user a stable status.
+    private var cryptoStatusView: TextView? = null
 
     // Single Handler for every key's long-press/repeat timers. Each
     // posted Runnable is stored on that key's own local variables (see
@@ -968,6 +978,17 @@ class SecureInputMethodService : InputMethodService() {
         })
         root.addView(actionRow)
 
+        val operationStatus = TextView(this).apply {
+            text = "جاهز — اختر ملفًا ثم اضغط 🔐 للتشفير"
+            setTextColor(ThemeUtil.textSecondaryColor(this@SecureInputMethodService))
+            textSize = 11f
+            gravity = Gravity.CENTER
+            setPadding(dpToPx(4f), dpToPx(3f), dpToPx(4f), dpToPx(3f))
+            visibility = if (cryptoBusy) View.VISIBLE else View.VISIBLE
+        }
+        cryptoStatusView = operationStatus
+        root.addView(operationStatus)
+
         val contactStatus = TextView(this).apply {
             text = if (selectedSecureContact == null) "الجهة: غير محددة — سيُستخدم التشفير العام للجلسة" else "الجهة: 🔐 $selectedSecureContact — تشفير مرتبط بالجهازين"
             setTextColor(if (selectedSecureContact == null) ThemeUtil.textColor(this@SecureInputMethodService) else ThemeUtil.accentColor(this@SecureInputMethodService))
@@ -1094,6 +1115,7 @@ class SecureInputMethodService : InputMethodService() {
         val mime = selectedAttachmentMime
         val displayName = selectedAttachmentName.ifBlank { "file" }
         cryptoBusy = true
+        cryptoStatusView?.text = "جارٍ تشفير الملف وإرفاقه…"
         android.widget.Toast.makeText(this, "جارٍ تشفير الملف وإرفاقه…", android.widget.Toast.LENGTH_SHORT).show()
         cryptoExecutor.execute {
             var outFile: java.io.File? = null
@@ -1104,6 +1126,7 @@ class SecureInputMethodService : InputMethodService() {
                 SecureFileCrypto.encrypt(this, input, outUri, publicKey, passphrase, displayName)
                 mainHandler.post {
                     cryptoBusy = false
+                    cryptoStatusView?.text = "✓ تم تشفير الملف — جارٍ إرفاق النسخة المشفّرة…"
                     val ic = currentInputConnection
                     if (ic == null || android.os.Build.VERSION.SDK_INT < 25) {
                         android.widget.Toast.makeText(this, "هذا التطبيق لا يدعم إرفاق الملفات من لوحة المفاتيح على هذا النظام", android.widget.Toast.LENGTH_LONG).show()
@@ -1112,7 +1135,7 @@ class SecureInputMethodService : InputMethodService() {
                     try {
                         val providerUri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.fileprovider", outFile!!)
                         grantUriPermission(packageName, providerUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        val info = InputContentInfo(providerUri, android.content.ClipDescription(displayName, arrayOf(mime, "application/octet-stream")), null)
+                        val info = InputContentInfo(providerUri, android.content.ClipDescription(displayName, arrayOf("application/octet-stream")), null)
                         val flags = InputConnection.INPUT_CONTENT_GRANT_READ_URI_PERMISSION
                         val accepted = ic.commitContent(info, flags, null)
                         if (!accepted) {
@@ -1122,8 +1145,10 @@ class SecureInputMethodService : InputMethodService() {
                             // sent: fall back to the system share UI so the user can choose
                             // WhatsApp and then press its normal Send button.
                             cryptoBusy = false
+                            cryptoStatusView?.text = "✓ لم يدعم التطبيق المستهدف الإرفاق المباشر — فُتحت المشاركة لاختيار واتساب"
                             shareEncryptedAttachment(outFile!!, displayName)
                         } else {
+                            cryptoStatusView?.text = "✓ تم إدراج الملف المشفّر — اضغط إرسال في واتساب لإرساله"
                             android.widget.Toast.makeText(this, "تم إدراج الملف المشفّر في المحادثة — اضغط إرسال في واتساب لإرساله، والأصل محفوظ", android.widget.Toast.LENGTH_LONG).show()
                             selectedAttachmentUri = null
                             selectedAttachmentName = ""
@@ -1137,6 +1162,7 @@ class SecureInputMethodService : InputMethodService() {
                 outFile?.delete()
                 mainHandler.post {
                     cryptoBusy = false
+                    cryptoStatusView?.text = "فشل تشفير الملف — ${e.message ?: "خطأ غير معروف"}"
                     android.widget.Toast.makeText(this, "فشل تشفير الملف: ${e.message ?: "خطأ غير معروف"}", android.widget.Toast.LENGTH_LONG).show()
                 }
             } finally {
@@ -1150,7 +1176,9 @@ class SecureInputMethodService : InputMethodService() {
             val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
             val share = Intent(Intent.ACTION_SEND).apply {
                 type = "application/octet-stream"
+                setDataAndType(uri, "application/octet-stream")
                 putExtra(Intent.EXTRA_STREAM, uri)
+                clipData = android.content.ClipData.newRawUri("SecureKeyboard encrypted file", uri)
                 putExtra(Intent.EXTRA_TEXT, "SecureKeyboard — ملف مشفّر: $originalName")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
@@ -1672,10 +1700,9 @@ class SecureInputMethodService : InputMethodService() {
             ThemeUtil.applyPressedElevation(this, pressed = false)
             isClickable = true
             isFocusable = true
-            // Lets performHapticFeedback() below actually produce a
-            // vibration - some OEM skins otherwise suppress haptics on
-            // views that haven't explicitly opted in.
-            isHapticFeedbackEnabled = true
+            // Security/UX policy: this keyboard does not vibrate on key
+            // presses. Some Android 14/OEM combinations can otherwise
+            // produce a vibration even when the app did not request it.
             // dp -> px conversion is what makes this consistent across
             // screen densities, instead of the old raw-pixel constant.
             val lp = LinearLayout.LayoutParams(0, dpToPx(heightDp.toFloat()), weight)
@@ -1704,11 +1731,8 @@ class SecureInputMethodService : InputMethodService() {
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
                         v.isPressed = true
-                        // Light tactile click on every key press, same
-                        // vibration Android's own keyboard/dialer keys
-                        // use - short, subtle, no custom vibration
-                        // pattern or permission needed.
-                        v.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+                        // No haptic feedback: keyboard input is intentionally
+                        // silent on all supported Android versions.
                         ThemeUtil.applyPressedElevation(v, pressed = true)
                         isTatweelRepeating = false
                         isKeyRepeating = false
@@ -2082,6 +2106,7 @@ class SecureInputMethodService : InputMethodService() {
         currentWord.clear()
         lastFinishedWord = null
         cryptoDecryptedText = null
+        cryptoStatusView = null
         contactPopup?.dismiss()
         // Safe to unconditionally drop here even with cryptoMenuSticky
         // set - onStartInputView is what actually decides whether to

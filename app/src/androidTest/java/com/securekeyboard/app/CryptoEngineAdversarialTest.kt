@@ -10,7 +10,7 @@ import org.junit.runner.RunWith
 import java.util.Arrays
 
 /**
- * V21 adversarial tests for the message crypto boundary.
+ * V26 adversarial tests for the message crypto boundary.
  * These tests deliberately mutate untrusted ciphertext/header bytes and verify
  * that parsing/authentication fails closed rather than returning plaintext.
  */
@@ -92,5 +92,46 @@ class CryptoEngineAdversarialTest {
         } finally {
             Arrays.fill(pass, '\u0000')
         }
+    }
+}
+
+@RunWith(AndroidJUnit4::class)
+class ContactCryptoEcdheAdversarialTest {
+    @Test
+    fun contact_message_uses_fresh_ephemeral_key_per_encryption() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val publicKey = DeviceIdentity.parseContactPublicKey(DeviceIdentity.myPublicKeyBase64(context))
+        val pass = "ecdhe-test-passphrase".toCharArray()
+        val plain = "رسالة سرية 🔐".toCharArray()
+        try {
+            val first = CryptoEngineV2.encrypt(context, plain, pass.copyOf(), publicKey)
+            val second = CryptoEngineV2.encrypt(context, plain, pass.copyOf(), publicKey)
+            assertTrue(first != second)
+            val decoded = CryptoEngineV2.decrypt(context, first, pass.copyOf(), publicKey)
+            try { assertArrayEquals(plain, decoded) } finally { Arrays.fill(decoded, '\u0000') }
+        } finally {
+            Arrays.fill(pass, '\u0000')
+            Arrays.fill(plain, '\u0000')
+        }
+    }
+
+    @Test
+    fun contact_message_tampered_ephemeral_public_key_is_rejected() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val publicKey = DeviceIdentity.parseContactPublicKey(DeviceIdentity.myPublicKeyBase64(context))
+        val pass = "ecdhe-test-passphrase".toCharArray()
+        try {
+            val encoded = CryptoEngineV2.encrypt(context, "tamper".toCharArray(), pass.copyOf(), publicKey)
+            val raw = android.util.Base64.decode(encoded, android.util.Base64.NO_WRAP)
+            val ephLen = ((raw[11].toInt() and 0xff) shl 8) or (raw[12].toInt() and 0xff)
+            assertTrue(ephLen in 50..200)
+            raw[13] = (raw[13].toInt() xor 0x01).toByte()
+            val tampered = android.util.Base64.encodeToString(raw, android.util.Base64.NO_WRAP)
+            try {
+                CryptoEngineV2.decrypt(context, tampered, pass.copyOf(), publicKey)
+                throw AssertionError("tampered ephemeral key unexpectedly decrypted")
+            } catch (_: Exception) {
+            } finally { Arrays.fill(raw, 0) }
+        } finally { Arrays.fill(pass, '\u0000') }
     }
 }

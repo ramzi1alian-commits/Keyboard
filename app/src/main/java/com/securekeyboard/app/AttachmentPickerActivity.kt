@@ -39,7 +39,11 @@ class AttachmentPickerActivity : Activity() {
                     setPackage(packageName)
                     putExtra(EXTRA_URI, uri)
                     putExtra(EXTRA_NAME, name)
-                    putExtra(EXTRA_MIME, mime)
+                    // The selected file's MIME is only metadata for the picker.
+                    // The keyboard encrypts it into an SKF container before
+                    // sharing, so the outgoing encrypted file must advertise
+                    // application/octet-stream, not the source MIME.
+                    putExtra(EXTRA_MIME, "application/octet-stream")
                 })
             }
         }

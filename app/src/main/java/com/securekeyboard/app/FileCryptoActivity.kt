@@ -203,7 +203,9 @@ class FileCryptoActivity : AppCompatActivity() {
             Arrays.fill(pass, '\u0000')
             return
         }
-        statusText.text = if (operation == 1) "جارٍ تشفير الملف…" else "جارٍ فك تشفير الملف…"
+        statusText.text = if (operation == 1) "جارٍ تشفير الملف… لا تغلق هذه الشاشة" else "جارٍ فك تشفير الملف… لا تغلق هذه الشاشة"
+        findViewById<Button>(R.id.file_pick_encrypt).isEnabled = false
+        findViewById<Button>(R.id.file_pick_decrypt).isEnabled = false
         Thread {
             try {
                 val publicKey = DeviceIdentity.parseContactPublicKey(contactB64)
@@ -226,16 +228,20 @@ class FileCryptoActivity : AppCompatActivity() {
                                 } finally { Arrays.fill(buffer, 0) }
                             }
                         }
-                    } finally { temp.delete() }
+                    } finally { SecureMemory.secureDelete(temp) }
                     selectedDisplayName = filename
                 }
                 runOnUiThread {
                     statusText.text = if (operation == 1) "✓ تم تشفير الملف بنجاح" else "✓ تم فك تشفير الملف بنجاح"
+                    findViewById<Button>(R.id.file_pick_encrypt).isEnabled = true
+                    findViewById<Button>(R.id.file_pick_decrypt).isEnabled = true
                     Toast.makeText(this, statusText.text, Toast.LENGTH_LONG).show()
                 }
             } catch (e: Exception) {
                 runOnUiThread {
                     statusText.text = "تعذر تنفيذ العملية: ${e.message ?: "الملف غير صالح"}"
+                    findViewById<Button>(R.id.file_pick_encrypt).isEnabled = true
+                    findViewById<Button>(R.id.file_pick_decrypt).isEnabled = true
                     Toast.makeText(this, statusText.text, Toast.LENGTH_LONG).show()
                 }
             } finally {

@@ -124,6 +124,27 @@ object DeviceIdentity {
         }
     }
 
+    fun generateEphemeralKeyPair(): java.security.KeyPair {
+        val generator = java.security.KeyPairGenerator.getInstance("EC")
+        generator.initialize(java.security.spec.ECGenParameterSpec("secp256r1"))
+        return generator.generateKeyPair()
+    }
+
+    fun computeSharedSecretWithPrivateKey(privateKey: java.security.PrivateKey, peerPublicKey: PublicKey): ByteArray {
+        val agreement = try {
+            KeyAgreement.getInstance("ECDH")
+        } catch (e: Exception) {
+            throw IllegalStateException("ECDH is not supported on this Android device", e)
+        }
+        try {
+            agreement.init(privateKey)
+            agreement.doPhase(peerPublicKey, true)
+            return agreement.generateSecret()
+        } catch (e: Exception) {
+            throw IllegalStateException("ECDH key agreement failed", e)
+        }
+    }
+
     fun computeSharedSecret(context: Context, contactPublicKey: PublicKey): ByteArray {
         val pair = getOrCreateKeyPair(context)
         val agreement = try {

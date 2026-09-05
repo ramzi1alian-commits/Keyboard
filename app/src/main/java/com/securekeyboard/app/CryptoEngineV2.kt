@@ -1,70 +1,25 @@
 package com.securekeyboard.app
 
 import android.util.Base64
+import java.nio.ByteBuffer
+import java.security.KeyFactory
 import java.security.PublicKey
-import javax.crypto.Mac
-import javax.crypto.spec.SecretKeySpec
-import javax.crypto.AEADBadTagException
+import java.security.spec.X509EncodedKeySpec
+import java.security.SecureRandom
+import java.util.Arrays
 import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
-import java.security.SecureRandom
-import java.nio.ByteBuffer
-import java.util.Arrays
+import javax.crypto.spec.SecretKeySpec
 
-/**
- * CryptoEngineV2
- *
- * Device-bound message encryption: the final AES key depends on BOTH
- * - the visible passphrase (same role as in CryptoEngine.kt today), AND
- * - a shared secret derived from THIS device's Keystore-resident
- *   private key + the specific contact's public key (see DeviceIdentity.kt)
- *
- * Consequence, verified by design: intercepting the passphrase AND the
- * ciphertext together (e.g. both sent over WhatsApp) is NOT sufficient
- * to decrypt. The missing ingredient - the recipient's private key -
- * never leaves their device's secure hardware, so it never travels
- * over any channel to intercept in the first place.
- *
- * This does NOT replace CryptoEngine.kt - that remains available as a
- * simpler passphrase-only mode (e.g. for encrypting a personal note to
- * yourself, where there's no "other device" to bind to). This class is
- * specifically for contact-to-contact messages. See EncryptActivity's
- * mode selector.
- *
- * ONE-TIME SETUP REQUIRED per contact: both sides must exchange public
- * keys once (DeviceIdentity.myPublicKeyBase64(this)) via any channel before
- * the first message - a QR code scan in person is the strongest option
- * (prevents a man-in-the-middle substituting their own public key
- * during the exchange). See ContactPairingActivity (to be added).
- */
+/** Contact-bound message encryption with per-message P-256 ECDHE. */
 object CryptoEngineV2 {
-
     private const val IV_LENGTH = 12
-    private const val KEY_LENGTH_BYTES = 32
-    const val FORMAT_VERSION: Byte = 2
-    private const val HEADER_LENGTH = 1 + 1 + 8 // version + expiry flag + expiry epoch seconds
+    private const val MAX_EPHEMERAL_KEY_BYTES = 200
+    private const val LEGACY_HEADER_LENGTH = 1 + 1 + 8
+    private const val ECDHE_PREFIX_LENGTH = 1 + 1 + 8 + 2
+    const val FORMAT_VERSION: Byte = 3
+    private const val LEGACY_FORMAT_VERSION: Byte = 2
 
-    /**
-     * HKDF-Extract-and-Expand (RFC 5869), combining the ECDH shared
-     * secret with the human passphrase. Both must be correct for the
-     * output to match on the recipient's side - get either one wrong
-     * and AES-GCM's auth tag simply fails to verify (see decrypt()).
-     */
-    private fun deriveMessageKey(
-        context: android.content.Context,
-        recipientPublicKey: PublicKey,
-        passphraseChars: CharArray
-    ): ByteArray = ContactCrypto.deriveAes256Key(
-        context,
-        recipientPublicKey,
-        passphraseChars,
-        ContactCrypto.Purpose.MESSAGE
-    )
-
-    /**
-     * @param recipientPublicKey the contact you're sending TO (from a
-     *   prior one-time pairing exchange - see class doc)
-     */
     fun encrypt(
         context: android.content.Context,
         textChars: CharArray,
@@ -72,33 +27,35 @@ object CryptoEngineV2 {
         recipientPublicKey: PublicKey,
         expirySeconds: Long? = null
     ): String {
-        val keyBytes = deriveMessageKey(context, recipientPublicKey, passphraseChars)
+        require(passphraseChars.isNotEmpty()) { "passphrase is empty" }
+        val ephemeral = DeviceIdentity.generateEphemeralKeyPair()
+        val keyBytes = ContactCrypto.deriveAes256KeyFromEphemeralPrivate(
+            ephemeral.private, recipientPublicKey, passphraseChars, ContactCrypto.Purpose.MESSAGE
+        )
         val plainBytes = CryptoEngine.charsToUtf8Bytes(textChars)
         val iv = ByteArray(IV_LENGTH).also { SecureRandom().nextBytes(it) }
+        val ephemeralBytes = ephemeral.public.encoded
         try {
-            val header = ByteBuffer.allocate(HEADER_LENGTH)
+            require(ephemeralBytes.size in 50..MAX_EPHEMERAL_KEY_BYTES) { "invalid ephemeral public key" }
+            val expiryFlag: Byte = if (expirySeconds != null) 1 else 0
+            if (expirySeconds != null) require(expirySeconds > 0) { "invalid expiry" }
+            val header = ByteBuffer.allocate(ECDHE_PREFIX_LENGTH + ephemeralBytes.size)
                 .put(FORMAT_VERSION)
-                .put(if (expirySeconds != null) 1 else 0)
+                .put(expiryFlag)
                 .putLong(if (expirySeconds != null) (System.currentTimeMillis() / 1000L) + expirySeconds else 0L)
+                .putShort(ephemeralBytes.size.toShort())
+                .put(ephemeralBytes)
                 .array()
-            val key = SecretKeySpec(keyBytes, "AES")
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(128, iv))
+            cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(keyBytes, "AES"), GCMParameterSpec(128, iv))
             cipher.updateAAD(header)
             val cipherBytes = cipher.doFinal(plainBytes)
-            val combined = header + iv + cipherBytes
-            return Base64.encodeToString(combined, Base64.NO_WRAP)
+            return Base64.encodeToString(header + iv + cipherBytes, Base64.NO_WRAP)
         } finally {
-            Arrays.fill(keyBytes, 0)
-            Arrays.fill(plainBytes, 0)
+            Arrays.fill(keyBytes, 0); Arrays.fill(plainBytes, 0); Arrays.fill(iv, 0); Arrays.fill(ephemeralBytes, 0)
         }
     }
 
-    /**
-     * @param senderPublicKey the contact who SENT this message (from
-     *   the same one-time pairing - ECDH is symmetric: my_priv+their_pub
-     *   equals their_priv+my_pub, so no separate "recipient key" needed)
-     */
     fun decrypt(
         context: android.content.Context,
         b64: String,
@@ -106,41 +63,85 @@ object CryptoEngineV2 {
         senderPublicKey: PublicKey
     ): CharArray {
         val combined = Base64.decode(b64, Base64.NO_WRAP)
-        require(combined.size > HEADER_LENGTH + IV_LENGTH) { "ciphertext too short" }
-        require(combined[0] == FORMAT_VERSION) { "unsupported format version" }
-
-        val header = combined.copyOfRange(0, HEADER_LENGTH)
-        val headerBuffer = ByteBuffer.wrap(header)
-        headerBuffer.get()
-        val expiryFlag = headerBuffer.get().toInt()
-        val expiryEpochSeconds = headerBuffer.long
-        if (expiryFlag != 0) {
-            require(expiryEpochSeconds > 0L) { "invalid expiry" }
-            if (System.currentTimeMillis() / 1000L >= expiryEpochSeconds) {
-                throw ExpiredMessageException()
-            }
-        }
-        val iv = combined.copyOfRange(HEADER_LENGTH, HEADER_LENGTH + IV_LENGTH)
-        val cipherBytes = combined.copyOfRange(HEADER_LENGTH + IV_LENGTH, combined.size)
-
-        val keyBytes = deriveMessageKey(context, senderPublicKey, passphraseChars)
-        try {
-            val key = SecretKeySpec(keyBytes, "AES")
-            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))
-            cipher.updateAAD(header)
-            val plainBytes = cipher.doFinal(cipherBytes) // throws AEADBadTagException on wrong key
-            try {
-                val charBuffer = Charsets.UTF_8.decode(ByteBuffer.wrap(plainBytes))
-                val chars = CharArray(charBuffer.remaining())
-                charBuffer.get(chars)
-                return chars
-            } finally {
-                Arrays.fill(plainBytes, 0)
-            }
-        } finally {
-            Arrays.fill(keyBytes, 0)
+        require(combined.size > LEGACY_HEADER_LENGTH + IV_LENGTH) { "ciphertext too short" }
+        return when (combined[0]) {
+            LEGACY_FORMAT_VERSION -> decryptLegacy(context, combined, passphraseChars, senderPublicKey)
+            FORMAT_VERSION -> decryptEcdhe(context, combined, passphraseChars)
+            else -> throw IllegalArgumentException("unsupported format version")
         }
     }
+
+    private fun decryptEcdhe(
+        context: android.content.Context,
+        combined: ByteArray,
+        passphraseChars: CharArray
+    ): CharArray {
+        require(combined.size >= ECDHE_PREFIX_LENGTH + 50 + IV_LENGTH + 16) { "ciphertext too short" }
+        val headerPrefix = combined.copyOfRange(0, ECDHE_PREFIX_LENGTH)
+        val buf = ByteBuffer.wrap(headerPrefix)
+        buf.get()
+        val expiryFlag = buf.get().toInt()
+        val expiryEpochSeconds = buf.long
+        val ephLen = buf.short.toInt() and 0xffff
+        require(ephLen in 50..MAX_EPHEMERAL_KEY_BYTES) { "invalid ephemeral key length" }
+        val headerLength = ECDHE_PREFIX_LENGTH + ephLen
+        require(combined.size > headerLength + IV_LENGTH + 16) { "ciphertext too short" }
+        val header = combined.copyOfRange(0, headerLength)
+        val ephemeralBytes = combined.copyOfRange(ECDHE_PREFIX_LENGTH, headerLength)
+        val iv = combined.copyOfRange(headerLength, headerLength + IV_LENGTH)
+        val cipherBytes = combined.copyOfRange(headerLength + IV_LENGTH, combined.size)
+        try {
+            validateExpiry(expiryFlag, expiryEpochSeconds)
+            val ephemeralPublic = KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(ephemeralBytes))
+            val keyBytes = ContactCrypto.deriveAes256KeyFromEphemeralPublic(context, ephemeralPublic, passphraseChars, ContactCrypto.Purpose.MESSAGE)
+            try {
+                val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+                cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(keyBytes, "AES"), GCMParameterSpec(128, iv))
+                cipher.updateAAD(header)
+                val plainBytes = cipher.doFinal(cipherBytes)
+                try { return utf8ToChars(plainBytes) } finally { Arrays.fill(plainBytes, 0) }
+            } finally { Arrays.fill(keyBytes, 0) }
+        } finally {
+            Arrays.fill(headerPrefix,0); Arrays.fill(header,0); Arrays.fill(ephemeralBytes,0); Arrays.fill(iv,0); Arrays.fill(cipherBytes,0)
+        }
+    }
+
+    private fun decryptLegacy(context: android.content.Context, combined: ByteArray, passphraseChars: CharArray, senderPublicKey: PublicKey): CharArray {
+        val header = combined.copyOfRange(0, LEGACY_HEADER_LENGTH)
+        try {
+            val headerBuffer = ByteBuffer.wrap(header)
+            headerBuffer.get()
+            val expiryFlag = headerBuffer.get().toInt()
+            val expiryEpochSeconds = headerBuffer.long
+            validateExpiry(expiryFlag, expiryEpochSeconds)
+            val iv = combined.copyOfRange(LEGACY_HEADER_LENGTH, LEGACY_HEADER_LENGTH + IV_LENGTH)
+            val cipherBytes = combined.copyOfRange(LEGACY_HEADER_LENGTH + IV_LENGTH, combined.size)
+            try {
+                val keyBytes = ContactCrypto.deriveAes256Key(context, senderPublicKey, passphraseChars, ContactCrypto.Purpose.MESSAGE)
+                try {
+                    val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+                    cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(keyBytes, "AES"), GCMParameterSpec(128, iv))
+                    cipher.updateAAD(header)
+                    val plainBytes = cipher.doFinal(cipherBytes)
+                    try { return utf8ToChars(plainBytes) } finally { Arrays.fill(plainBytes, 0) }
+                } finally { Arrays.fill(keyBytes, 0) }
+            } finally { Arrays.fill(iv,0); Arrays.fill(cipherBytes,0) }
+        } finally { Arrays.fill(header,0) }
+    }
+
+    private fun validateExpiry(flag: Int, epoch: Long) {
+        require(flag == 0 || flag == 1) { "invalid expiry flag" }
+        if (flag != 0) {
+            require(epoch > 0L) { "invalid expiry" }
+            if (System.currentTimeMillis() / 1000L >= epoch) throw ExpiredMessageException()
+        }
+    }
+
+    private fun utf8ToChars(bytes: ByteArray): CharArray {
+        val decoder = Charsets.UTF_8.newDecoder()
+        val chars = decoder.decode(ByteBuffer.wrap(bytes)).let { buffer -> CharArray(buffer.remaining()).also { buffer.get(it) } }
+        return chars
+    }
+
     class ExpiredMessageException : Exception()
 }

@@ -201,7 +201,7 @@ class SecureFileReceiveActivity : Activity() {
     }
 
     private fun cleanupTemp() {
-        pendingTempPath?.let { java.io.File(it).delete() }
+        pendingTempPath?.let { SecureMemory.secureDelete(java.io.File(it)) }
         pendingTempPath = null
     }
 

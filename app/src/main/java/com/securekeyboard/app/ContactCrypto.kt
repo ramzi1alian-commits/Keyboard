@@ -30,6 +30,56 @@ object ContactCrypto {
         FILE(FILE_SALT, FILE_INFO)
     }
 
+    fun deriveAes256KeyFromEphemeralPrivate(
+        ephemeralPrivateKey: java.security.PrivateKey,
+        recipientPublicKey: PublicKey,
+        passphraseChars: CharArray,
+        purpose: Purpose
+    ): ByteArray = deriveFromSharedSecretForInternal(
+        DeviceIdentity.computeSharedSecretWithPrivateKey(ephemeralPrivateKey, recipientPublicKey),
+        passphraseChars,
+        purpose
+    )
+
+    fun deriveAes256KeyFromEphemeralPublic(
+        context: Context,
+        senderEphemeralPublicKey: PublicKey,
+        passphraseChars: CharArray,
+        purpose: Purpose
+    ): ByteArray = deriveFromSharedSecretForInternal(
+        DeviceIdentity.computeSharedSecret(context, senderEphemeralPublicKey),
+        passphraseChars,
+        purpose
+    )
+
+    fun deriveFromSharedSecretForInternal(
+        sharedSecret: ByteArray,
+        passphraseChars: CharArray,
+        purpose: Purpose
+    ): ByteArray {
+        require(passphraseChars.isNotEmpty()) { "passphrase is empty" }
+        val passBytes = CryptoEngine.charsToUtf8Bytes(passphraseChars)
+        val ikm = sharedSecret + passBytes
+        val salt = purpose.salt.toByteArray(Charsets.UTF_8)
+        val info = purpose.info.toByteArray(Charsets.UTF_8)
+        return try {
+            val extract = Mac.getInstance("HmacSHA256")
+            extract.init(SecretKeySpec(salt, "HmacSHA256"))
+            val prk = extract.doFinal(ikm)
+            try {
+                val expand = Mac.getInstance("HmacSHA256")
+                expand.init(SecretKeySpec(prk, "HmacSHA256"))
+                expand.doFinal(info + byteArrayOf(1)).copyOf(KEY_LENGTH_BYTES)
+            } finally { Arrays.fill(prk, 0) }
+        } finally {
+            Arrays.fill(sharedSecret, 0)
+            Arrays.fill(passBytes, 0)
+            Arrays.fill(ikm, 0)
+            Arrays.fill(salt, 0)
+            Arrays.fill(info, 0)
+        }
+    }
+
     /** Derives the AES-256 key from the same contact identity used everywhere. */
     fun deriveAes256Key(
         context: Context,

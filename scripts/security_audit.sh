@@ -67,7 +67,7 @@ if (( fail != 0 )); then
 fi
 
 
-# V21 adversarial-test guardrails
+# V25 adversarial-test guardrails
 if [[ -f "$ROOT/app/src/androidTest/java/com/securekeyboard/app/CryptoEngineAdversarialTest.kt" ]]; then
   echo "PASS: adversarial crypto test suite present"
 else
