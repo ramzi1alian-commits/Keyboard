@@ -71,6 +71,7 @@ object Prefs {
     private const val ACCENT_SECURE_GREEN = "secure_green"
 
     private fun accentNameToRes(name: String?): Int = when (name) {
+        ACCENT_CYAN -> R.color.accent_cyan
         ACCENT_TEAL -> R.color.accent_teal
         ACCENT_GOLD -> R.color.accent_gold
         ACCENT_PURPLE -> R.color.accent_purple
@@ -79,6 +80,7 @@ object Prefs {
     }
 
     private fun resToAccentName(colorRes: Int): String = when (colorRes) {
+        R.color.accent_cyan -> ACCENT_CYAN
         R.color.accent_teal -> ACCENT_TEAL
         R.color.accent_gold -> ACCENT_GOLD
         R.color.accent_purple -> ACCENT_PURPLE
@@ -88,7 +90,7 @@ object Prefs {
 
     fun accentColorRes(context: Context): Int {
         val pref = prefs(context)
-        return accentNameToRes(pref.getString(KEY_ACCENT, ACCENT_SECURE_GREEN))
+        return accentNameToRes(pref.getString(KEY_ACCENT, ACCENT_CYAN))
     }
 
     fun setAccentColorRes(context: Context, colorRes: Int) {
@@ -98,7 +100,7 @@ object Prefs {
 
     fun isDarkMode(context: Context): Boolean {
         val prefs = prefs(context)
-        return prefs.getBoolean(KEY_DARK, true)
+        return prefs.getBoolean(KEY_DARK, false)
     }
 
     fun setDarkMode(context: Context, dark: Boolean) {

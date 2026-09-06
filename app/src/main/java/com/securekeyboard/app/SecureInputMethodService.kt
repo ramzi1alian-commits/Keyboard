@@ -11,7 +11,7 @@ import android.view.inputmethod.InputContentInfo
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
-import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.GradientDrawable
 import android.inputmethodservice.InputMethodService
 import android.os.Handler
 import android.os.Looper
@@ -190,7 +190,7 @@ class SecureInputMethodService : InputMethodService() {
         // tatweel-extend behavior. Order here is left-to-right in the
         // popup, matching the LTR row direction used for the key rows.
         private val LETTER_VARIANTS = mapOf(
-            "ا" to listOf("ا", "أ", "إ", "آ", "ء"),
+            "ا" to listOf("ا", "أ", "إ", "آ"),
             // ADDED: alif maqsura (ى) and yeh-with-hamza (ئ) as long-press
             // variants of ي - all three are common word-final Arabic
             // letters (يحيى/إلى/على end in ى; قارئ/شاطئ use ئ) that had no
@@ -1997,12 +1997,20 @@ class SecureInputMethodService : InputMethodService() {
      */
     private fun showVariantPopup(anchor: View, variants: List<String>): Pair<PopupWindow, LinearLayout> {
         val chipSizePx = dpToPx(42f)
+        val popupFill = ThemeUtil.keyShapeFillColor(this@SecureInputMethodService)
+        val popupStroke = ThemeUtil.textSecondaryColor(this@SecureInputMethodService)
+        val popupBackground = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            setColor(popupFill)
+            setStroke(dpToPx(1.2f), popupStroke)
+            cornerRadius = dpToPx(12f).toFloat()
+        }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = View.LAYOUT_DIRECTION_LTR
-            background = ThemeUtil.keyBackgroundSelector(this@SecureInputMethodService, accented = false)
-            elevation = dpToPx(6f).toFloat()
-            setPadding(dpToPx(3f), dpToPx(3f), dpToPx(3f), dpToPx(3f))
+            background = popupBackground
+            elevation = dpToPx(8f).toFloat()
+            setPadding(dpToPx(4f), dpToPx(4f), dpToPx(4f), dpToPx(4f))
             for (v in variants) {
                 addView(TextView(this@SecureInputMethodService).apply {
                     text = v
@@ -2011,6 +2019,8 @@ class SecureInputMethodService : InputMethodService() {
                     includeFontPadding = false
                     typeface = Typeface.create(Fonts.currentTypeface(this@SecureInputMethodService) as Typeface, Typeface.NORMAL)
                     layoutParams = LinearLayout.LayoutParams(chipSizePx, chipSizePx)
+                    setBackgroundColor(popupFill)
+                    setTextColor(ThemeUtil.textColor(this@SecureInputMethodService))
                     // FIXED: this chip used to get no explicit text color or
                     // background at creation time - both were only ever set
                     // later, by highlightVariantChip() on the first
@@ -2030,8 +2040,6 @@ class SecureInputMethodService : InputMethodService() {
                     // explicit solid background and text color of its own,
                     // instead of depending on a background call that arrives
                     // one step later.
-                    setBackgroundColor(ThemeUtil.keyShapeFillColor(this@SecureInputMethodService))
-                    setTextColor(ThemeUtil.textColor(this@SecureInputMethodService))
                 })
             }
         }
@@ -2039,23 +2047,23 @@ class SecureInputMethodService : InputMethodService() {
         val popup = PopupWindow(content, LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT, false)
         popup.isTouchable = false
         popup.isClippingEnabled = false
-        // FIXED: this PopupWindow never had its OWN background drawable set
-        // (only content's did) - a null PopupWindow background disables its
-        // elevation/shadow compositing on several Android versions and, on
-        // at least some OEM skins, can affect whether the window surface
-        // beneath the content view is composited as opaque at all. The
-        // contacts drawer (showSecureContactsPanel, just above) already sets
-        // this; this popup did not, which singles it out as the one popup
-        // in this class that could show as "transparent, letters
-        // unreadable" reports.
-        popup.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        // Android/OEM-safe: the PopupWindow itself gets an opaque rounded
+        // background. A transparent/null window background can make the
+        // floating variant surface appear invisible even while its children
+        // are receiving and updating drag-selection events.
+        popup.setBackgroundDrawable(popupBackground)
+        popup.setElevation(dpToPx(8f).toFloat())
 
         val widthSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
         content.measure(widthSpec, widthSpec)
         val loc = IntArray(2)
         anchor.getLocationOnScreen(loc)
-        val xOff = loc[0] + anchor.width / 2 - content.measuredWidth / 2
-        val yOff = loc[1] - content.measuredHeight - dpToPx(4f)
+        val displayMetrics = resources.displayMetrics
+        val screenWidth = displayMetrics.widthPixels
+        val margin = dpToPx(6f)
+        val centeredX = loc[0] + anchor.width / 2 - content.measuredWidth / 2
+        val xOff = centeredX.coerceIn(margin, (screenWidth - content.measuredWidth - margin).coerceAtLeast(margin))
+        val yOff = (loc[1] - content.measuredHeight - dpToPx(4f)).coerceAtLeast(dpToPx(4f))
         popup.showAtLocation(anchor, Gravity.NO_GRAVITY, xOff, yOff)
         return Pair(popup, content)
     }

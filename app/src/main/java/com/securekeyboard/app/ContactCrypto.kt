@@ -68,11 +68,11 @@ object ContactCrypto {
         val salt = purpose.salt.toByteArray(Charsets.UTF_8)
         val info = purpose.info.toByteArray(Charsets.UTF_8)
         return try {
-            val extract = Mac.getInstance("HmacSHA256", CryptoProvider.NAME)
+            val extract = Mac.getInstance("HmacSHA256")
             extract.init(SecretKeySpec(salt, "HmacSHA256"))
             val prk = extract.doFinal(ikm)
             try {
-                val expand = Mac.getInstance("HmacSHA256", CryptoProvider.NAME)
+                val expand = Mac.getInstance("HmacSHA256")
                 expand.init(SecretKeySpec(prk, "HmacSHA256"))
                 expand.doFinal(info + byteArrayOf(1)).copyOf(KEY_LENGTH_BYTES)
             } finally { Arrays.fill(prk, 0) }
@@ -101,11 +101,11 @@ object ContactCrypto {
         val info = purpose.info.toByteArray(Charsets.UTF_8)
 
         return try {
-            val extract = Mac.getInstance("HmacSHA256", CryptoProvider.NAME)
+            val extract = Mac.getInstance("HmacSHA256")
             extract.init(SecretKeySpec(salt, "HmacSHA256"))
             val prk = extract.doFinal(ikm)
             try {
-                val expand = Mac.getInstance("HmacSHA256", CryptoProvider.NAME)
+                val expand = Mac.getInstance("HmacSHA256")
                 expand.init(SecretKeySpec(prk, "HmacSHA256"))
                 expand.doFinal(info + byteArrayOf(1)).copyOf(KEY_LENGTH_BYTES)
             } finally {

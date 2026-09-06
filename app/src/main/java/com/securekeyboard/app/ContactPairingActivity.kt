@@ -55,7 +55,12 @@ class ContactPairingActivity : AppCompatActivity() {
 
         contactName = intent.getStringExtra(EXTRA_CONTACT_NAME) ?: ""
 
-        showMyQrCode()
+        try {
+            showMyQrCode()
+        } catch (_: Exception) {
+            Toast.makeText(this, getString(R.string.pairing_invalid_qr), Toast.LENGTH_LONG).show()
+            findViewById<android.widget.ImageView>(R.id.qr_image_view).setImageDrawable(null)
+        }
         setupScanButton()
         setupConfirmButton()
         ThemeUtil.tintPrimary(this, findViewById(R.id.confirm_match_button))

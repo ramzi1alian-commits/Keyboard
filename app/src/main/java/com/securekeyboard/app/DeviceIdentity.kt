@@ -40,12 +40,8 @@ object DeviceIdentity {
     private const val FORMAT_VERSION = 1
 
     init {
-        // FIXED: see CryptoProvider's doc comment - this object's own
-        // header comment above already documents the goal of "one
-        // deterministic ECDH implementation on Android 8 through 14",
-        // but every getInstance() call below used to omit the provider
-        // name, which is exactly what could break that promise on a
-        // specific OS version. Pinning "BC" here closes that gap.
+        // Retained as a compatibility hook; standard EC/ECDH primitives
+        // intentionally use Android's platform provider selection.
         CryptoProvider.ensureRegistered()
     }
 
@@ -71,9 +67,9 @@ object DeviceIdentity {
                                     val privateBytes = ByteArray(privateLen)
                                     buf.get(privateBytes)
                                     try {
-                                        val pub = KeyFactory.getInstance("EC", CryptoProvider.NAME)
+                                        val pub = KeyFactory.getInstance("EC")
                                             .generatePublic(X509EncodedKeySpec(publicBytes))
-                                        val priv = KeyFactory.getInstance("EC", CryptoProvider.NAME)
+                                        val priv = KeyFactory.getInstance("EC")
                                             .generatePrivate(PKCS8EncodedKeySpec(privateBytes))
                                         return KeyPair(pub, priv)
                                     } finally {
@@ -92,7 +88,7 @@ object DeviceIdentity {
             }
         }
 
-        val generator = KeyPairGenerator.getInstance("EC", CryptoProvider.NAME)
+        val generator = KeyPairGenerator.getInstance("EC")
         generator.initialize(ECGenParameterSpec(CURVE))
         val pair = generator.generateKeyPair()
         val pub = pair.public.encoded
@@ -128,21 +124,21 @@ object DeviceIdentity {
         val bytes = Base64.decode(base64, Base64.NO_WRAP)
         require(bytes.size in 50..MAX_KEY_BYTES) { "invalid public key size" }
         return try {
-            KeyFactory.getInstance("EC", CryptoProvider.NAME).generatePublic(X509EncodedKeySpec(bytes))
+            KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(bytes))
         } finally {
             Arrays.fill(bytes, 0)
         }
     }
 
     fun generateEphemeralKeyPair(): java.security.KeyPair {
-        val generator = java.security.KeyPairGenerator.getInstance("EC", CryptoProvider.NAME)
+        val generator = java.security.KeyPairGenerator.getInstance("EC")
         generator.initialize(java.security.spec.ECGenParameterSpec("secp256r1"))
         return generator.generateKeyPair()
     }
 
     fun computeSharedSecretWithPrivateKey(privateKey: java.security.PrivateKey, peerPublicKey: PublicKey): ByteArray {
         val agreement = try {
-            KeyAgreement.getInstance("ECDH", CryptoProvider.NAME)
+            KeyAgreement.getInstance("ECDH")
         } catch (e: Exception) {
             throw IllegalStateException("ECDH is not supported on this Android device", e)
         }
@@ -158,7 +154,7 @@ object DeviceIdentity {
     fun computeSharedSecret(context: Context, contactPublicKey: PublicKey): ByteArray {
         val pair = getOrCreateKeyPair(context)
         val agreement = try {
-            KeyAgreement.getInstance("ECDH", CryptoProvider.NAME)
+            KeyAgreement.getInstance("ECDH")
         } catch (e: Exception) {
             throw IllegalStateException("ECDH is not supported on this Android device", e)
         }

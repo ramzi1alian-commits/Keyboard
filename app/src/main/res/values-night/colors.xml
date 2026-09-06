@@ -8,7 +8,9 @@
     <color name="slate_200">#F8FAFC</color>
     <color name="white">#FFFFFF</color>
 
-    <color name="accent_gold">#F0B94A</color>
+    <color name="accent_cyan">#22D3EE</color>
+    <color name="accent_cyan_dark">#0891B2</color>
+        <color name="accent_gold">#F0B94A</color>
     <!-- Primary secure-green palette used by the secure keyboard UI. -->
     <color name="accent_secure_green">#69FF46</color>
 </resources>

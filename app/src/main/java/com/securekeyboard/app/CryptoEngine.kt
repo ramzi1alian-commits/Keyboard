@@ -46,7 +46,7 @@ object CryptoEngine {
         // See CryptoProvider's doc comment / DeviceIdentity's init block.
         // This object already uses BouncyCastle directly for Argon2id
         // (imports above) - this just makes its AES-GCM calls go through
-        // the same BC provider too, instead of an unpinned OS default.
+        // the same compatibility path without pinning Android to a provider name.
         CryptoProvider.ensureRegistered()
     }
 
@@ -198,7 +198,7 @@ object CryptoEngine {
             val header = buildHeaderV3(hasExpiry, expiryEpoch, memoryKb)
 
             val key = SecretKeySpec(keyBytes, "AES")
-            val cipher = Cipher.getInstance("AES/GCM/NoPadding", CryptoProvider.NAME)
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(128, iv))
             cipher.updateAAD(header)
             val cipherBytes = cipher.doFinal(plainBytes)
@@ -278,7 +278,7 @@ object CryptoEngine {
         val keyBytes = deriveKey(passChars, salt, memoryKb, iterations, parallelism)
         try {
             val key = SecretKeySpec(keyBytes, "AES")
-            val cipher = Cipher.getInstance("AES/GCM/NoPadding", CryptoProvider.NAME)
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))
             cipher.updateAAD(header)
             val plainBytes = cipher.doFinal(cipherBytes)
