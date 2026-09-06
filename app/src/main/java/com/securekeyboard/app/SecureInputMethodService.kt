@@ -12,6 +12,7 @@ import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.GradientDrawable
 import android.inputmethodservice.InputMethodService
 import android.os.Handler
 import android.os.Looper
@@ -797,7 +798,7 @@ class SecureInputMethodService : InputMethodService() {
             Prefs.markReturnToCrypto(this@SecureInputMethodService)
             val intent = Intent(this@SecureInputMethodService, EncryptActivity::class.java).apply {
                 putExtra(EncryptActivity.EXTRA_POPUP_MODE, true)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_HISTORY)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             startActivity(intent)
         })
