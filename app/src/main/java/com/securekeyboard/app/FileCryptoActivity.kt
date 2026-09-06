@@ -111,18 +111,16 @@ class FileCryptoActivity : AppCompatActivity() {
         refreshSessionStatus()
     }
 
-    // Fires every time this Activity leaves the foreground - including the
-    // transient dips while the OPEN_DOCUMENT / OPEN_DOCUMENT_TREE pickers are
-    // on top, not just the final exit back to the host app. That is
-    // deliberate: requestShowSelf(SHOW_IMPLICIT) on the receiving end is a
-    // no-op when there is no real field to show a keyboard for (i.e. while a
-    // system picker is genuinely on top), so the extra broadcasts during the
-    // picker round-trips cost nothing, while the one that matters - the
-    // final onStop as the user returns to their original app - now actually
-    // asks the IME to reappear instead of leaving them without a keyboard.
-    override fun onStop() {
-        super.onStop()
-        sendBroadcast(Intent(ACTION_FILE_CRYPTO_RETURNED).setPackage(packageName))
+    // IMPORTANT: onStop() is NOT a reliable "returned from file picker" signal.
+    // It also runs whenever DocumentsUI is placed above this Activity, which
+    // caused the IME handoff to fire too early on Android 8 and 14. Only notify
+    // the IME when this Activity is actually finishing.
+    override fun onDestroy() {
+        val finishing = isFinishing
+        super.onDestroy()
+        if (finishing) {
+            sendBroadcast(Intent(ACTION_FILE_CRYPTO_RETURNED).setPackage(packageName))
+        }
     }
 
     private fun refreshContacts() {

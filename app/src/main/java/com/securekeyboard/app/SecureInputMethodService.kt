@@ -272,13 +272,23 @@ class SecureInputMethodService : InputMethodService() {
                 }
                 else -> return
             }
-            // Android 14 can keep the IME hidden after DocumentsUI returns -
-            // reported on Android 8 too. Ask the system to show this IME
-            // again after the bridge/tool Activity has finished, without
-            // changing the selected target field.
-            mainHandler.postDelayed({
-                try { requestShowSelf(android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT) } catch (_: Exception) {}
-            }, 180L)
+            // The broadcast is emitted only when FileCryptoActivity really
+            // finishes (never while DocumentsUI is merely on top). Android 8
+            // and 14 can still take a few frames to restore the host editor,
+            // so use a small bounded retry sequence. Explicit requests are
+            // preferred here because this is an intentional user action.
+            val delays = longArrayOf(80L, 220L, 500L, 900L)
+            delays.forEach { delay ->
+                mainHandler.postDelayed({
+                    try {
+                        if (cryptoMenuSticky && !isInputViewShown) {
+                            requestShowSelf(android.view.inputmethod.InputMethodManager.SHOW_EXPLICIT)
+                        } else if (cryptoMenuSticky) {
+                            rebuildKeyboardView()
+                        }
+                    } catch (_: Exception) {}
+                }, delay)
+            }
         }
     }
     private var contactPopup: PopupWindow? = null
@@ -797,7 +807,7 @@ class SecureInputMethodService : InputMethodService() {
             Prefs.markReturnToCrypto(this@SecureInputMethodService)
             val intent = Intent(this@SecureInputMethodService, EncryptActivity::class.java).apply {
                 putExtra(EncryptActivity.EXTRA_POPUP_MODE, true)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_HISTORY)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             startActivity(intent)
         })
@@ -958,8 +968,12 @@ class SecureInputMethodService : InputMethodService() {
         // is on screen. Only the page flag is persisted; no plaintext/draft
         // is written to disk.
         Prefs.markReturnToCrypto(this)
+        // Do NOT use FLAG_ACTIVITY_NO_HISTORY here. The file picker is a
+        // separate DocumentsUI Activity and Android 8/14 can otherwise lose
+        // the bridge Activity before the result returns, leaving the IME
+        // without a deterministic handoff point.
         val intent = Intent(this, FileCryptoActivity::class.java).addFlags(
-            Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_HISTORY
+            Intent.FLAG_ACTIVITY_NEW_TASK
         )
         selectedSecureContact?.let { intent.putExtra(FileCryptoActivity.EXTRA_CONTACT_NAME, it) }
         startActivity(intent)
