@@ -190,7 +190,13 @@ class SecureInputMethodService : InputMethodService() {
         // tatweel-extend behavior. Order here is left-to-right in the
         // popup, matching the LTR row direction used for the key rows.
         private val LETTER_VARIANTS = mapOf(
-            "ا" to listOf("ا", "أ", "إ", "آ")
+            "ا" to listOf("ا", "أ", "إ", "آ", "ء"),
+            // ADDED: alif maqsura (ى) and yeh-with-hamza (ئ) as long-press
+            // variants of ي - all three are common word-final Arabic
+            // letters (يحيى/إلى/على end in ى; قارئ/شاطئ use ئ) that had no
+            // way to be typed on this keyboard at all before now, main
+            // layout unchanged either way.
+            "ي" to listOf("ي", "ى", "ئ")
         )
 
         // ADDED - multi-mode keyboard: Arabic letters (default), English
@@ -272,23 +278,13 @@ class SecureInputMethodService : InputMethodService() {
                 }
                 else -> return
             }
-            // The broadcast is emitted only when FileCryptoActivity really
-            // finishes (never while DocumentsUI is merely on top). Android 8
-            // and 14 can still take a few frames to restore the host editor,
-            // so use a small bounded retry sequence. Explicit requests are
-            // preferred here because this is an intentional user action.
-            val delays = longArrayOf(80L, 220L, 500L, 900L)
-            delays.forEach { delay ->
-                mainHandler.postDelayed({
-                    try {
-                        if (cryptoMenuSticky && !isInputViewShown) {
-                            requestShowSelf(android.view.inputmethod.InputMethodManager.SHOW_EXPLICIT)
-                        } else if (cryptoMenuSticky) {
-                            rebuildKeyboardView()
-                        }
-                    } catch (_: Exception) {}
-                }, delay)
-            }
+            // Android 14 can keep the IME hidden after DocumentsUI returns -
+            // reported on Android 8 too. Ask the system to show this IME
+            // again after the bridge/tool Activity has finished, without
+            // changing the selected target field.
+            mainHandler.postDelayed({
+                try { requestShowSelf(android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT) } catch (_: Exception) {}
+            }, 180L)
         }
     }
     private var contactPopup: PopupWindow? = null
@@ -807,7 +803,7 @@ class SecureInputMethodService : InputMethodService() {
             Prefs.markReturnToCrypto(this@SecureInputMethodService)
             val intent = Intent(this@SecureInputMethodService, EncryptActivity::class.java).apply {
                 putExtra(EncryptActivity.EXTRA_POPUP_MODE, true)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_HISTORY)
             }
             startActivity(intent)
         })
@@ -968,12 +964,8 @@ class SecureInputMethodService : InputMethodService() {
         // is on screen. Only the page flag is persisted; no plaintext/draft
         // is written to disk.
         Prefs.markReturnToCrypto(this)
-        // Do NOT use FLAG_ACTIVITY_NO_HISTORY here. The file picker is a
-        // separate DocumentsUI Activity and Android 8/14 can otherwise lose
-        // the bridge Activity before the result returns, leaving the IME
-        // without a deterministic handoff point.
         val intent = Intent(this, FileCryptoActivity::class.java).addFlags(
-            Intent.FLAG_ACTIVITY_NEW_TASK
+            Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_HISTORY
         )
         selectedSecureContact?.let { intent.putExtra(FileCryptoActivity.EXTRA_CONTACT_NAME, it) }
         startActivity(intent)
@@ -1144,6 +1136,11 @@ class SecureInputMethodService : InputMethodService() {
      * InputConnection/UI touch-points below run on the main thread.
      */
     private fun openAttachmentPicker() {
+        // See Prefs.markReturnToSecureCompose's doc comment: this must be
+        // persisted, not just left to the in-memory secureComposeSticky
+        // flag, because this process can be killed while
+        // AttachmentPickerActivity is in the foreground.
+        Prefs.markReturnToSecureCompose(this)
         val intent = Intent(this, AttachmentPickerActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         startActivity(intent)
     }
@@ -2127,7 +2124,15 @@ class SecureInputMethodService : InputMethodService() {
         if (restoreCrypto) {
             cryptoMenuSticky = true
         }
-        val cameFromOverlay = showingSymbols || showingEmoji || showingCrypto || showingSecureCompose || restoreCrypto
+        // See Prefs.markReturnToSecureCompose's doc comment - this is the
+        // persisted counterpart to secureComposeSticky, needed because that
+        // in-memory flag alone does not survive this process being killed
+        // while AttachmentPickerActivity was in the foreground.
+        val restoreSecureCompose = Prefs.consumeReturnToSecureCompose(this)
+        if (restoreSecureCompose) {
+            secureComposeSticky = true
+        }
+        val cameFromOverlay = showingSymbols || showingEmoji || showingCrypto || showingSecureCompose || restoreCrypto || restoreSecureCompose
         showingSymbols = false
         showingEmoji = false
         // Sensitive plaintext from a previous decrypt never survives a

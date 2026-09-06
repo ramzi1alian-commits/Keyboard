@@ -42,6 +42,14 @@ object CryptoEngine {
     const val SALT_LENGTH = 16
     const val KEY_LENGTH_BYTES = 32 // AES-256
 
+    init {
+        // See CryptoProvider's doc comment / DeviceIdentity's init block.
+        // This object already uses BouncyCastle directly for Argon2id
+        // (imports above) - this just makes its AES-GCM calls go through
+        // the same BC provider too, instead of an unpinned OS default.
+        CryptoProvider.ensureRegistered()
+    }
+
     // --- Ciphertext header versions ---
     //
     // v2 (legacy): 1 (version) + 1 (hasExpiry) + 8 (expiry epoch seconds) = 10 bytes.
@@ -190,7 +198,7 @@ object CryptoEngine {
             val header = buildHeaderV3(hasExpiry, expiryEpoch, memoryKb)
 
             val key = SecretKeySpec(keyBytes, "AES")
-            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding", CryptoProvider.NAME)
             cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(128, iv))
             cipher.updateAAD(header)
             val cipherBytes = cipher.doFinal(plainBytes)
@@ -270,7 +278,7 @@ object CryptoEngine {
         val keyBytes = deriveKey(passChars, salt, memoryKb, iterations, parallelism)
         try {
             val key = SecretKeySpec(keyBytes, "AES")
-            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding", CryptoProvider.NAME)
             cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))
             cipher.updateAAD(header)
             val plainBytes = cipher.doFinal(cipherBytes)

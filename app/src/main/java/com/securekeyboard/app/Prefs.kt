@@ -18,6 +18,7 @@ object Prefs {
     private const val KEY_KEYBOARD_HEIGHT = "keyboard_height_dp"
     private const val KEY_AUTOCORRECT = "autocorrect_enabled"
     private const val KEY_RETURN_TO_CRYPTO = "return_to_crypto"
+    private const val KEY_RETURN_TO_SECURE_COMPOSE = "return_to_secure_compose"
 
     // Preferences here are only UI/configuration state, not secrets.  The
     // performance fix is to keep ONE process-local SharedPreferences handle
@@ -130,6 +131,32 @@ object Prefs {
         val p = prefs(context)
         val value = p.getBoolean(KEY_RETURN_TO_CRYPTO, false)
         if (value) p.edit().remove(KEY_RETURN_TO_CRYPTO).apply()
+        return value
+    }
+
+    /**
+     * Same idea and same reason as markReturnToCrypto/consumeReturnToCrypto,
+     * for secure-compose specifically. Before this, secure-compose's own
+     * "return after picker" state (secureComposeSticky in
+     * SecureInputMethodService) lived ONLY in memory - fine if the IME's
+     * process survives the whole AttachmentPickerActivity round trip, but
+     * that process is backgrounded/cached for the whole time the picker is
+     * in the foreground, and Android is free to kill cached processes
+     * under memory pressure. If it does, a freshly recreated service
+     * starts with secureComposeSticky back at its default (false), with no
+     * way left to know a return to secure-compose was ever pending -
+     * exactly "returns to the default keyboard, exits the secure pad"
+     * reports. Persisting this the same way markReturnToCrypto already
+     * does closes that gap.
+     */
+    fun markReturnToSecureCompose(context: Context) {
+        prefs(context).edit().putBoolean(KEY_RETURN_TO_SECURE_COMPOSE, true).apply()
+    }
+
+    fun consumeReturnToSecureCompose(context: Context): Boolean {
+        val p = prefs(context)
+        val value = p.getBoolean(KEY_RETURN_TO_SECURE_COMPOSE, false)
+        if (value) p.edit().remove(KEY_RETURN_TO_SECURE_COMPOSE).apply()
         return value
     }
 

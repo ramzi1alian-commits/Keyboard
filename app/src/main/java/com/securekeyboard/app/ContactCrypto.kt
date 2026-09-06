@@ -25,6 +25,11 @@ object ContactCrypto {
     private const val FILE_SALT = "SecureKeyboard-file-salt-v1"
     private const val FILE_INFO = "SecureKeyboard-file-key-v1"
 
+    init {
+        // See CryptoProvider's doc comment / DeviceIdentity's init block.
+        CryptoProvider.ensureRegistered()
+    }
+
     enum class Purpose(val salt: String, val info: String) {
         MESSAGE(MESSAGE_SALT, MESSAGE_INFO),
         FILE(FILE_SALT, FILE_INFO)
@@ -63,11 +68,11 @@ object ContactCrypto {
         val salt = purpose.salt.toByteArray(Charsets.UTF_8)
         val info = purpose.info.toByteArray(Charsets.UTF_8)
         return try {
-            val extract = Mac.getInstance("HmacSHA256")
+            val extract = Mac.getInstance("HmacSHA256", CryptoProvider.NAME)
             extract.init(SecretKeySpec(salt, "HmacSHA256"))
             val prk = extract.doFinal(ikm)
             try {
-                val expand = Mac.getInstance("HmacSHA256")
+                val expand = Mac.getInstance("HmacSHA256", CryptoProvider.NAME)
                 expand.init(SecretKeySpec(prk, "HmacSHA256"))
                 expand.doFinal(info + byteArrayOf(1)).copyOf(KEY_LENGTH_BYTES)
             } finally { Arrays.fill(prk, 0) }
@@ -96,11 +101,11 @@ object ContactCrypto {
         val info = purpose.info.toByteArray(Charsets.UTF_8)
 
         return try {
-            val extract = Mac.getInstance("HmacSHA256")
+            val extract = Mac.getInstance("HmacSHA256", CryptoProvider.NAME)
             extract.init(SecretKeySpec(salt, "HmacSHA256"))
             val prk = extract.doFinal(ikm)
             try {
-                val expand = Mac.getInstance("HmacSHA256")
+                val expand = Mac.getInstance("HmacSHA256", CryptoProvider.NAME)
                 expand.init(SecretKeySpec(prk, "HmacSHA256"))
                 expand.doFinal(info + byteArrayOf(1)).copyOf(KEY_LENGTH_BYTES)
             } finally {

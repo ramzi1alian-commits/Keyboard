@@ -37,15 +37,20 @@ object SecureFileCrypto {
     private const val MAX_METADATA_CIPHER = 64 * 1024
     private const val BUFFER_SIZE = 64 * 1024
 
+    init {
+        // See CryptoProvider's doc comment / DeviceIdentity's init block.
+        CryptoProvider.ensureRegistered()
+    }
+
     private fun aesGcmEncrypt(key: ByteArray, iv: ByteArray, aad: ByteArray, plain: ByteArray): ByteArray {
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding", CryptoProvider.NAME)
         cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, iv))
         cipher.updateAAD(aad)
         return cipher.doFinal(plain)
     }
 
     private fun aesGcmDecrypt(key: ByteArray, iv: ByteArray, aad: ByteArray, cipherBytes: ByteArray): ByteArray {
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding", CryptoProvider.NAME)
         cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, iv))
         cipher.updateAAD(aad)
         return cipher.doFinal(cipherBytes)
@@ -87,7 +92,7 @@ object SecureFileCrypto {
                         BufferedOutputStream(rawOut, BUFFER_SIZE).use { outputStream ->
                             outputStream.write(header)
                             outputStream.write(metaCipher)
-                            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+                            val cipher = Cipher.getInstance("AES/GCM/NoPadding", CryptoProvider.NAME)
                             cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, contentIv))
                             cipher.updateAAD(header + metaCipher)
                             CipherOutputStream(outputStream, cipher).use { encryptedOut ->
@@ -152,7 +157,7 @@ object SecureFileCrypto {
         var key = ByteArray(0)
         try {
             readFully(input, metaCipher)
-            val ephemeralPublic = KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(ephemeralBytes))
+            val ephemeralPublic = KeyFactory.getInstance("EC", CryptoProvider.NAME).generatePublic(X509EncodedKeySpec(ephemeralBytes))
             key = ContactCrypto.deriveAes256KeyFromEphemeralPublic(context, ephemeralPublic, passphrase, ContactCrypto.Purpose.FILE)
             val filenameBytes = aesGcmDecrypt(key, metaIv, header.copyOf(header.size - 4), metaCipher)
             val filename = try { String(filenameBytes, Charsets.UTF_8) } finally { Arrays.fill(filenameBytes, 0) }
@@ -166,7 +171,7 @@ object SecureFileCrypto {
     }
 
     private fun decryptContent(input: java.io.InputStream, temp: File, key: ByteArray, contentIv: ByteArray, header: ByteArray, metaCipher: ByteArray) {
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding", CryptoProvider.NAME)
         cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, contentIv))
         cipher.updateAAD(header + metaCipher)
         FileOutputStream(temp).use { rawOut ->
