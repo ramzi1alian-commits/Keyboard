@@ -11,6 +11,7 @@ import android.view.inputmethod.InputContentInfo
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.ColorDrawable
 import android.inputmethodservice.InputMethodService
 import android.os.Handler
 import android.os.Looper
@@ -256,15 +257,25 @@ class SecureInputMethodService : InputMethodService() {
 
     private val attachmentReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action != AttachmentPickerActivity.ACTION_ATTACHMENT_SELECTED) return
-            val uri = intent.getParcelableExtra<Uri>(AttachmentPickerActivity.EXTRA_URI) ?: return
-            selectedAttachmentUri = uri
-            selectedAttachmentName = intent.getStringExtra(AttachmentPickerActivity.EXTRA_NAME).orEmpty().ifBlank { "file" }
-            selectedAttachmentMime = "application/octet-stream"
-            rebuildKeyboardView()
-            // Android 14 can keep the IME hidden after DocumentsUI returns.
-            // Ask the system to show this IME again after the bridge Activity
-            // has finished, without changing the selected target field.
+            when (intent?.action) {
+                AttachmentPickerActivity.ACTION_ATTACHMENT_SELECTED -> {
+                    val uri = intent.getParcelableExtra<Uri>(AttachmentPickerActivity.EXTRA_URI) ?: return
+                    selectedAttachmentUri = uri
+                    selectedAttachmentName = intent.getStringExtra(AttachmentPickerActivity.EXTRA_NAME).orEmpty().ifBlank { "file" }
+                    selectedAttachmentMime = "application/octet-stream"
+                    rebuildKeyboardView()
+                }
+                FileCryptoActivity.ACTION_FILE_CRYPTO_RETURNED -> {
+                    // No state to update here (FileCryptoActivity keeps its
+                    // own UI state entirely on its side) - just the same
+                    // "ask to be shown again" nudge below.
+                }
+                else -> return
+            }
+            // Android 14 can keep the IME hidden after DocumentsUI returns -
+            // reported on Android 8 too. Ask the system to show this IME
+            // again after the bridge/tool Activity has finished, without
+            // changing the selected target field.
             mainHandler.postDelayed({
                 try { requestShowSelf(android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT) } catch (_: Exception) {}
             }, 180L)
@@ -372,6 +383,7 @@ class SecureInputMethodService : InputMethodService() {
         SessionKeyStore.initialize(this)
         if (!attachmentReceiverRegistered) {
             val filter = IntentFilter(AttachmentPickerActivity.ACTION_ATTACHMENT_SELECTED)
+            filter.addAction(FileCryptoActivity.ACTION_FILE_CRYPTO_RETURNED)
             if (android.os.Build.VERSION.SDK_INT >= 33) {
                 registerReceiver(attachmentReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
             } else {
@@ -488,6 +500,40 @@ class SecureInputMethodService : InputMethodService() {
         // leave it sitting in memory once the user has explicitly left
         // secure mode via "رجوع".
         cryptoDecryptedText = null
+    }
+
+    /**
+     * Appends the system clipboard's current text into composeBuffer -
+     * the ONLY way to get existing text into secure-compose before this,
+     * was retyping it one key at a time on this same small in-keyboard
+     * page, since composeBuffer is deliberately never wired to a real
+     * EditText/InputConnection (see the class-level doc on composeBuffer)
+     * and so never gets the system's own long-press "Paste" affordance.
+     *
+     * The clipboard is cleared immediately after the paste succeeds: once
+     * the text has been copied into the secure buffer, leaving the same
+     * plaintext sitting in the system clipboard (readable by any other app
+     * that polls it) would undermine the reason this screen exists in the
+     * first place. This mirrors the existing "plaintext never touches
+     * anything but this in-memory buffer" policy that composeBuffer's own
+     * doc comment describes for typed input.
+     */
+    private fun pasteClipboardIntoCompose() {
+        val cm = getSystemService(CLIPBOARD_SERVICE) as? ClipboardManager
+        val clip = cm?.primaryClip
+        val clipText = if (clip != null && clip.itemCount > 0) clip.getItemAt(0).text?.toString() else null
+        if (clipText.isNullOrEmpty()) {
+            android.widget.Toast.makeText(this, "الحافظة فارغة", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        composeBuffer.append(clipText)
+        composePreviewView?.text = composeBuffer.toString()
+        try {
+            cm?.setPrimaryClip(android.content.ClipData.newPlainText("", ""))
+        } catch (_: Exception) {
+            // Some OEMs restrict programmatic clipboard clears; the paste
+            // itself already succeeded either way.
+        }
     }
 
     /**
@@ -975,6 +1021,9 @@ class SecureInputMethodService : InputMethodService() {
         })
         actionRow.addView(makeKey("📎", weight = 1f, heightDp = heightDp, a11yLabel = "اختيار ملف") {
             openAttachmentPicker()
+        })
+        actionRow.addView(makeKey("📋", weight = 1f, heightDp = heightDp, a11yLabel = "لصق من الحافظة") {
+            pasteClipboardIntoCompose()
         })
         root.addView(actionRow)
 
@@ -1951,6 +2000,27 @@ class SecureInputMethodService : InputMethodService() {
                     includeFontPadding = false
                     typeface = Typeface.create(Fonts.currentTypeface(this@SecureInputMethodService) as Typeface, Typeface.NORMAL)
                     layoutParams = LinearLayout.LayoutParams(chipSizePx, chipSizePx)
+                    // FIXED: this chip used to get no explicit text color or
+                    // background at creation time - both were only ever set
+                    // later, by highlightVariantChip() on the first
+                    // ACTION_MOVE. highlightVariantChip(content, 0) IS called
+                    // right after this popup is shown (see the ACTION_DOWN
+                    // handler below), so in principle the very first frame
+                    // was covered - but on some Android versions/OEM
+                    // compositors a PopupWindow whose OWN background was
+                    // never set (only its content view's background was)
+                    // can render with a transparent/undefined surface behind
+                    // a still-transparent-background TextView for one or
+                    // more frames, which is exactly "letters with no visible
+                    // background so they're unreadable against whatever is
+                    // underneath" - the popup box itself was rendering, but
+                    // relying entirely on the container's background with no
+                    // solid backing per chip. Every chip now starts with an
+                    // explicit solid background and text color of its own,
+                    // instead of depending on a background call that arrives
+                    // one step later.
+                    setBackgroundColor(ThemeUtil.keyShapeFillColor(this@SecureInputMethodService))
+                    setTextColor(ThemeUtil.textColor(this@SecureInputMethodService))
                 })
             }
         }
@@ -1958,6 +2028,16 @@ class SecureInputMethodService : InputMethodService() {
         val popup = PopupWindow(content, LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT, false)
         popup.isTouchable = false
         popup.isClippingEnabled = false
+        // FIXED: this PopupWindow never had its OWN background drawable set
+        // (only content's did) - a null PopupWindow background disables its
+        // elevation/shadow compositing on several Android versions and, on
+        // at least some OEM skins, can affect whether the window surface
+        // beneath the content view is composited as opaque at all. The
+        // contacts drawer (showSecureContactsPanel, just above) already sets
+        // this; this popup did not, which singles it out as the one popup
+        // in this class that could show as "transparent, letters
+        // unreadable" reports.
+        popup.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
 
         val widthSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
         content.measure(widthSpec, widthSpec)
@@ -1987,7 +2067,19 @@ class SecureInputMethodService : InputMethodService() {
                 chip.setBackgroundColor(ThemeUtil.accentColor(this))
                 chip.setTextColor(ThemeUtil.textOnAccentColor(this))
             } else {
-                chip.setBackgroundColor(Color.TRANSPARENT)
+                // FIXED: this used to set Color.TRANSPARENT here, relying
+                // entirely on the parent container's background to show
+                // through underneath every non-selected chip. That is the
+                // actual bug behind "the popup is transparent, letters are
+                // unreadable" reports - if the container's own background
+                // does not composite as expected on a given Android version/
+                // OEM skin (showVariantPopup's popup previously had no
+                // background of its own either - now fixed alongside this),
+                // every unselected chip in this popup had nothing behind its
+                // text at all. Every chip now keeps its own solid fill
+                // color instead of depending on whatever is (or isn't)
+                // painted behind it.
+                chip.setBackgroundColor(ThemeUtil.keyShapeFillColor(this))
                 chip.setTextColor(ThemeUtil.textColor(this))
             }
         }

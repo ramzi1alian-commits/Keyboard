@@ -76,4 +76,36 @@ else
 fi
 check_present 'cipher.doFinal' "$SRC/com/securekeyboard/app/SecureFileCrypto.kt" "File GCM authentication finalized explicitly"
 
+# Fast JVM unit test suite (Robolectric-backed, no emulator required).
+if [[ -f "$ROOT/app/src/test/java/com/securekeyboard/app/CryptoEngineUnitTest.kt" ]]; then
+  echo "PASS: fast unit test suite present"
+else
+  echo "FAIL: fast unit test suite missing"
+  fail=1
+fi
+
+# Supply-chain hardening guardrails - these must not silently regress.
+check_present 'dependencyLocking' "$ROOT/app/build.gradle" "Dependency locking enabled (app module)"
+check_present 'activateDependencyLocking' "$ROOT/build.gradle" "Dependency locking enabled (buildscript classpath)"
+check_present 'org\.gradle\.dependency\.verification=strict' "$ROOT/gradle.properties" "Dependency checksum verification set to strict"
+check_present 'FAIL_ON_PROJECT_REPOS' "$ROOT/settings.gradle" "Repository content filtering enforced"
+
+if [[ -f "$ROOT/docs/security/THREAT_MODEL.md" ]]; then
+  echo "PASS: threat model document present"
+else
+  echo "FAIL: threat model document missing"
+  fail=1
+fi
+if [[ -f "$ROOT/docs/security/SUPPLY_CHAIN.md" ]]; then
+  echo "PASS: supply-chain hardening document present"
+else
+  echo "FAIL: supply-chain hardening document missing"
+  fail=1
+fi
+
+if (( fail != 0 )); then
+  echo "SECURITY AUDIT: FAILED"
+  exit 1
+fi
+
 echo "SECURITY AUDIT: PASSED"

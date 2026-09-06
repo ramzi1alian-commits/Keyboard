@@ -4,8 +4,17 @@ buildscript {
         mavenCentral()
     }
     dependencies {
+        // Exact versions pinned (no + or ranges anywhere in this project) so
+        // a build today and a build in a year resolve to byte-identical
+        // plugin artifacts. Combined with dependencyLocking below and
+        // gradle/verification-metadata.xml, an upstream artifact being
+        // silently replaced/compromised causes a hard build failure instead
+        // of a silent supply-chain compromise.
         classpath 'com.android.tools.build:gradle:8.2.0'
         classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.22'
+    }
+    configurations.classpath {
+        resolutionStrategy.activateDependencyLocking()
     }
 }
 

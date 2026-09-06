@@ -373,6 +373,19 @@ object ThemeUtil {
         return states
     }
 
+    /**
+     * Plain solid color matching keyShape's normal (non-pressed) fill -
+     * for spots that need a guaranteed-opaque background on an individual
+     * child view rather than a whole StateListDrawable (see showVariantPopup's
+     * per-chip background in SecureInputMethodService: relying solely on a
+     * parent container's background left the popup showing as
+     * transparent/unreadable on some devices).
+     */
+    fun keyShapeFillColor(context: Context): Int {
+        val ctx = themedContext(context)
+        return ContextCompat.getColor(ctx, R.color.navy_800)
+    }
+
     private fun keyShape(context: Context, pressed: Boolean, accented: Boolean): GradientDrawable {
         val ctx = themedContext(context)
         val density = context.resources.displayMetrics.density

@@ -3,6 +3,16 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
+// Supply-chain hardening: lock the fully-resolved dependency graph
+// (direct + transitive) to exact versions+hashes. Run
+// `./gradlew :app:dependencies --write-locks` after any intentional
+// dependency change to refresh app/gradle.lockfile; CI (see
+// .github/workflows/android.yml) runs with `--locked` so an unreviewed
+// transitive version bump fails the build instead of silently shipping.
+dependencyLocking {
+    lockAllConfigurations()
+}
+
 android {
     namespace 'com.securekeyboard.app'
     compileSdk 34
@@ -61,6 +71,15 @@ android {
     kotlinOptions {
         jvmTarget = '1.8'
     }
+
+    testOptions {
+        unitTests {
+            includeAndroidResources = true
+            all {
+                maxParallelForks = 1 // Argon2id tests are memory-heavy; avoid OOM from parallel forks.
+            }
+        }
+    }
 }
 
 dependencies {
@@ -76,10 +95,18 @@ dependencies {
     // PBKDF2 at an equivalent "iteration count".
     implementation 'org.bouncycastle:bcprov-jdk18on:1.78.1'
 
-    // V21 adversarial/instrumented crypto tests.
+    // V21 adversarial/instrumented crypto tests (require an emulator/device,
+    // exercise real Keystore-backed paths).
     androidTestImplementation 'androidx.test.ext:junit:1.2.1'
     androidTestImplementation 'androidx.test:runner:1.6.2'
     androidTestImplementation 'androidx.test:rules:1.6.1'
+
+    // Fast JVM-level unit tests: run in seconds with no emulator, so they
+    // execute on every push/PR rather than only when the emulator job runs.
+    // Robolectric is needed because CryptoEngine calls android.util.Base64,
+    // which throws "not mocked" under plain JUnit without it.
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.12.2'
     // Intentionally NO networking libraries (no OkHttp, Retrofit, etc).
     // This app never requests android.permission.INTERNET in the manifest,
     // so the OS itself blocks any network access at install time -
