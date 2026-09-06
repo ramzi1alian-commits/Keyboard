@@ -18,12 +18,24 @@ buildscript {
     }
 }
 
-allprojects {
-    repositories {
-        google()
-        mavenCentral()
-    }
-}
+// FIXED: settings.gradle's dependencyResolutionManagement sets
+// repositoriesMode = FAIL_ON_PROJECT_REPOS specifically so that no build
+// file anywhere in the project can declare its own repositories {} block
+// for dependency resolution - only the centrally vetted, content-filtered
+// repositories in settings.gradle may resolve project dependencies (that
+// is the whole supply-chain-hardening point of that file: a module can't
+// quietly add an unvetted repository and have some dependency resolve
+// from there instead). An `allprojects { repositories {...} } block used
+// to sit here as leftover from before that centralization - which is
+// exactly the kind of project-level repository declaration
+// FAIL_ON_PROJECT_REPOS exists to reject, so every build failed at
+// evaluation time with "repository 'Google' was added by build file
+// build.gradle". Removed - see settings.gradle for the one place project
+// dependency repositories are now declared. NOTE: the buildscript{}
+// repositories block above is unaffected and still required - it
+// resolves the Android/Kotlin Gradle *plugins* themselves, which is a
+// separate, earlier resolution step that dependencyResolutionManagement
+// does not (and cannot) govern.
 
 task clean(type: Delete) {
     delete rootProject.buildDir
