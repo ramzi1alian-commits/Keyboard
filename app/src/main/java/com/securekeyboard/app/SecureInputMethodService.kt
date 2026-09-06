@@ -11,7 +11,7 @@ import android.view.inputmethod.InputContentInfo
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.ColorDrawable
 import android.inputmethodservice.InputMethodService
 import android.os.Handler
 import android.os.Looper
@@ -271,11 +271,6 @@ class SecureInputMethodService : InputMethodService() {
                     selectedAttachmentMime = "application/octet-stream"
                     rebuildKeyboardView()
                 }
-                FileCryptoActivity.ACTION_FILE_CRYPTO_RETURNED -> {
-                    // No state to update here (FileCryptoActivity keeps its
-                    // own UI state entirely on its side) - just the same
-                    // "ask to be shown again" nudge below.
-                }
                 else -> return
             }
             // Android 14 can keep the IME hidden after DocumentsUI returns -
@@ -389,7 +384,6 @@ class SecureInputMethodService : InputMethodService() {
         SessionKeyStore.initialize(this)
         if (!attachmentReceiverRegistered) {
             val filter = IntentFilter(AttachmentPickerActivity.ACTION_ATTACHMENT_SELECTED)
-            filter.addAction(FileCryptoActivity.ACTION_FILE_CRYPTO_RETURNED)
             if (android.os.Build.VERSION.SDK_INT >= 33) {
                 registerReceiver(attachmentReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
             } else {
@@ -718,7 +712,7 @@ class SecureInputMethodService : InputMethodService() {
             }
             val resultView = TextView(this).apply {
                 text = decrypted
-                setTextColor(Color.WHITE)
+                setTextColor(ThemeUtil.textColor(this@SecureInputMethodService))
                 textSize = 15f
                 setPadding(padding, padding, padding, padding)
                 layoutDirection = View.LAYOUT_DIRECTION_RTL
@@ -965,7 +959,7 @@ class SecureInputMethodService : InputMethodService() {
         // is written to disk.
         Prefs.markReturnToCrypto(this)
         val intent = Intent(this, FileCryptoActivity::class.java).addFlags(
-            Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_HISTORY
+            Intent.FLAG_ACTIVITY_NEW_TASK
         )
         selectedSecureContact?.let { intent.putExtra(FileCryptoActivity.EXTRA_CONTACT_NAME, it) }
         startActivity(intent)
@@ -979,7 +973,7 @@ class SecureInputMethodService : InputMethodService() {
         }
 
         val preview = TextView(this).apply {
-            setTextColor(Color.WHITE)
+            setTextColor(ThemeUtil.textColor(this@SecureInputMethodService))
             textSize = 16f
             setPadding(dpToPx(8f), dpToPx(6f), dpToPx(8f), dpToPx(6f))
             layoutDirection = View.LAYOUT_DIRECTION_RTL
@@ -1110,7 +1104,7 @@ class SecureInputMethodService : InputMethodService() {
         }
         val resultView = TextView(this).apply {
             text = decrypted
-            setTextColor(Color.WHITE)
+            setTextColor(ThemeUtil.textColor(this@SecureInputMethodService))
             textSize = 15f
             setPadding(padding, padding, padding, padding)
             layoutDirection = View.LAYOUT_DIRECTION_RTL
@@ -1565,7 +1559,7 @@ class SecureInputMethodService : InputMethodService() {
         }
         val textView = TextView(this).apply {
             this.text = text
-            setTextColor(Color.WHITE)
+            setTextColor(ThemeUtil.textColor(this@SecureInputMethodService))
             textSize = 15f
             textDirection = View.TEXT_DIRECTION_RTL
         }
@@ -1997,20 +1991,12 @@ class SecureInputMethodService : InputMethodService() {
      */
     private fun showVariantPopup(anchor: View, variants: List<String>): Pair<PopupWindow, LinearLayout> {
         val chipSizePx = dpToPx(42f)
-        val popupFill = ThemeUtil.keyShapeFillColor(this@SecureInputMethodService)
-        val popupStroke = ThemeUtil.textSecondaryColor(this@SecureInputMethodService)
-        val popupBackground = GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            setColor(popupFill)
-            setStroke(dpToPx(1.2f), popupStroke)
-            cornerRadius = dpToPx(12f).toFloat()
-        }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutDirection = View.LAYOUT_DIRECTION_LTR
-            background = popupBackground
-            elevation = dpToPx(8f).toFloat()
-            setPadding(dpToPx(4f), dpToPx(4f), dpToPx(4f), dpToPx(4f))
+            background = ThemeUtil.keyBackgroundSelector(this@SecureInputMethodService, accented = false)
+            elevation = dpToPx(6f).toFloat()
+            setPadding(dpToPx(3f), dpToPx(3f), dpToPx(3f), dpToPx(3f))
             for (v in variants) {
                 addView(TextView(this@SecureInputMethodService).apply {
                     text = v
@@ -2019,8 +2005,6 @@ class SecureInputMethodService : InputMethodService() {
                     includeFontPadding = false
                     typeface = Typeface.create(Fonts.currentTypeface(this@SecureInputMethodService) as Typeface, Typeface.NORMAL)
                     layoutParams = LinearLayout.LayoutParams(chipSizePx, chipSizePx)
-                    setBackgroundColor(popupFill)
-                    setTextColor(ThemeUtil.textColor(this@SecureInputMethodService))
                     // FIXED: this chip used to get no explicit text color or
                     // background at creation time - both were only ever set
                     // later, by highlightVariantChip() on the first
@@ -2040,30 +2024,43 @@ class SecureInputMethodService : InputMethodService() {
                     // explicit solid background and text color of its own,
                     // instead of depending on a background call that arrives
                     // one step later.
+                    setBackgroundColor(ThemeUtil.keyShapeFillColor(this@SecureInputMethodService))
+                    setTextColor(ThemeUtil.textColor(this@SecureInputMethodService))
                 })
             }
         }
 
-        val popup = PopupWindow(content, LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT, false)
-        popup.isTouchable = false
-        popup.isClippingEnabled = false
-        // Android/OEM-safe: the PopupWindow itself gets an opaque rounded
-        // background. A transparent/null window background can make the
-        // floating variant surface appear invisible even while its children
-        // are receiving and updating drag-selection events.
-        popup.setBackgroundDrawable(popupBackground)
-        popup.setElevation(dpToPx(8f).toFloat())
+        val popupBackground = GradientDrawable().apply {
+            cornerRadius = dpToPx(9f).toFloat()
+            setColor(ThemeUtil.keyShapeFillColor(this@SecureInputMethodService))
+            setStroke(dpToPx(1f), ThemeUtil.textSecondaryColor(this@SecureInputMethodService))
+        }
+        val popup = PopupWindow(content, LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT, false).apply {
+            // The key keeps the gesture, so the popup itself must not steal touch.
+            isTouchable = false
+            isFocusable = false
+            isOutsideTouchable = false
+            isClippingEnabled = false
+            setBackgroundDrawable(popupBackground)
+            elevation = dpToPx(8f).toFloat()
+            inputMethodMode = PopupWindow.INPUT_METHOD_NOT_NEEDED
+            softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
+        }
 
         val widthSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-        content.measure(widthSpec, widthSpec)
+        val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        content.measure(widthSpec, heightSpec)
         val loc = IntArray(2)
         anchor.getLocationOnScreen(loc)
-        val displayMetrics = resources.displayMetrics
-        val screenWidth = displayMetrics.widthPixels
-        val margin = dpToPx(6f)
-        val centeredX = loc[0] + anchor.width / 2 - content.measuredWidth / 2
-        val xOff = centeredX.coerceIn(margin, (screenWidth - content.measuredWidth - margin).coerceAtLeast(margin))
-        val yOff = (loc[1] - content.measuredHeight - dpToPx(4f)).coerceAtLeast(dpToPx(4f))
+        val popupWidth = content.measuredWidth
+        val popupHeight = content.measuredHeight
+        val screenWidth = resources.displayMetrics.widthPixels
+        val xOff = (loc[0] + anchor.width / 2 - popupWidth / 2).coerceIn(0, (screenWidth - popupWidth).coerceAtLeast(0))
+        val yAbove = loc[1] - popupHeight - dpToPx(6f)
+        val yBelow = loc[1] + anchor.height + dpToPx(6f)
+        val frame = android.graphics.Rect()
+        anchor.getWindowVisibleDisplayFrame(frame)
+        val yOff = if (yAbove >= frame.top) yAbove else yBelow
         popup.showAtLocation(anchor, Gravity.NO_GRAVITY, xOff, yOff)
         return Pair(popup, content)
     }

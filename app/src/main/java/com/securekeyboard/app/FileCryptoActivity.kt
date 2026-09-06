@@ -33,21 +33,6 @@ class FileCryptoActivity : AppCompatActivity() {
                 private const val ADD_CONTACT = 5103
         private const val CREATE_OUTPUT_TREE = 5104
 
-        // Same problem, same fix, as AttachmentPickerActivity's
-        // ACTION_ATTACHMENT_SELECTED broadcast (see its own comment): this
-        // Activity round-trips through TWO separate DocumentsUI pickers
-        // (ACTION_OPEN_DOCUMENT then ACTION_OPEN_DOCUMENT_TREE) before the
-        // user gets back to whatever app they were typing in. On some
-        // Android versions (reported on both 8 and 14 - not just the 14
-        // case the attachment picker comment mentions) that back-navigation
-        // does not implicitly re-show the IME, leaving the user with no
-        // visible keyboard until they manually tap the field again.
-        // Broadcasting on onStop() lets the IME ask the system to show
-        // itself again right after this Activity (and, transitively, the
-        // whole file-crypto flow launched from it) actually leaves the
-        // screen - see SecureInputMethodService's handling of this action.
-        const val ACTION_FILE_CRYPTO_RETURNED = "com.securekeyboard.app.FILE_CRYPTO_RETURNED"
-
         // FIXED: "decrypt says the key/file is corrupted even though the
         // file is valid, seems to confuse contact keys with the public
         // key" - this is not actually a key-selection bug. SKF2 files are
@@ -109,20 +94,6 @@ class FileCryptoActivity : AppCompatActivity() {
         super.onResume()
         refreshContacts()
         refreshSessionStatus()
-    }
-
-    // Fires every time this Activity leaves the foreground - including the
-    // transient dips while the OPEN_DOCUMENT / OPEN_DOCUMENT_TREE pickers are
-    // on top, not just the final exit back to the host app. That is
-    // deliberate: requestShowSelf(SHOW_IMPLICIT) on the receiving end is a
-    // no-op when there is no real field to show a keyboard for (i.e. while a
-    // system picker is genuinely on top), so the extra broadcasts during the
-    // picker round-trips cost nothing, while the one that matters - the
-    // final onStop as the user returns to their original app - now actually
-    // asks the IME to reappear instead of leaving them without a keyboard.
-    override fun onStop() {
-        super.onStop()
-        sendBroadcast(Intent(ACTION_FILE_CRYPTO_RETURNED).setPackage(packageName))
     }
 
     private fun refreshContacts() {
@@ -206,7 +177,7 @@ class FileCryptoActivity : AppCompatActivity() {
             }
             // Prefer a real file URI when the tree provider supports creating one.
             val created = try {
-                DocumentsContract.createDocument(contentResolver, output, "*/*", name)
+                DocumentsContract.createDocument(contentResolver, output, if (pendingOperation == 1) "application/octet-stream" else "application/octet-stream", name)
             } catch (_: Exception) { null }
             if (created != null) {
                 runFileOperation(input, created, pendingOperation)

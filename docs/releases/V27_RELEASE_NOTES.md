@@ -10,9 +10,3 @@
 - GitHub Actions emulator job fixed to use the matching `google_apis` API 34 image and hardware acceleration on GitHub-hosted Linux runners.
 - Removed the manually created AVD that was not the AVD used by the emulator-runner action.
 - Disabled snapshot restore/save and wipe emulator data for deterministic boot.
-
-### V27/V3.7 popup rendering fix
-- Arabic alif long-press popup now uses an opaque rounded PopupWindow background with explicit border/elevation.
-- Four alif variants are shown: ا / أ / إ / آ.
-- Popup X position is clamped to the screen so the full variant strip is visible on narrow/edge keys.
-- No new top-level release file was added.

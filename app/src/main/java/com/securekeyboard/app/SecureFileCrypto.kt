@@ -150,7 +150,11 @@ object SecureFileCrypto {
         val tail = rest.copyOfRange(2, rest.size)
         val metaLen = ByteBuffer.wrap(tail, tail.size - 4, 4).int
         require(metaLen in 16..MAX_METADATA_CIPHER) { "invalid metadata" }
-        val header = prefix + rest + ephemeralBytes
+        // The v2 wire format is: MAGIC + VERSION + ephLen + ephPub + metaIv + contentIv + metaLen.
+        // `rest` is read as ephLen + tail, so rebuilding the header as prefix+rest+ephPub
+        // silently moved the ephemeral public key to the END of the authenticated header.
+        // That made every v2 file fail GCM authentication on decrypt, including Android 8.
+        val header = prefix + rest.copyOfRange(0, 2) + ephemeralBytes + tail
         val metaIv = tail.copyOfRange(0, IV_LENGTH)
         val contentIv = tail.copyOfRange(IV_LENGTH, IV_LENGTH * 2)
         val metaCipher = ByteArray(metaLen)
