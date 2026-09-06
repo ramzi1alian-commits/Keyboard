@@ -6,9 +6,20 @@ plugins {
 // Supply-chain hardening: lock the fully-resolved dependency graph
 // (direct + transitive) to exact versions+hashes. Run
 // `./gradlew :app:dependencies --write-locks` after any intentional
-// dependency change to refresh app/gradle.lockfile; CI (see
-// .github/workflows/android.yml) runs with `--locked` so an unreviewed
-// transitive version bump fails the build instead of silently shipping.
+// dependency change to refresh app/gradle.lockfile.
+//
+// CORRECTED: this comment previously claimed CI already runs with
+// `--locked`, enforcing that an unreviewed transitive bump fails the
+// build. That was not true - .github/workflows/android.yml invokes plain
+// `gradle --no-daemon :app:assembleDebug` / `:app:testDebugUnitTest`, with
+// no `--locked` flag anywhere, so locking is NOT currently enforced by CI.
+// This is deliberate for now, not an oversight introduced here: the
+// lockfile this would enforce against does not exist yet either (see
+// docs/security/SUPPLY_CHAIN.md - it requires the one-time
+// bootstrap-supply-chain.yml workflow to be run and its output PR merged
+// first). Passing `--locked` before that file exists would hard-fail
+// every build immediately. Once the lockfile is merged, add `--locked` to
+// both gradle invocations in android.yml to make this comment true.
 dependencyLocking {
     lockAllConfigurations()
 }

@@ -52,6 +52,35 @@ dependencyResolutionManagement {
                 // shape is very likely to appear next, once the unit-tests
                 // CI job resolves ITS classpath, if this isn't added now.
                 includeGroup "org.hamcrest"
+                // kotlinCompilerClasspath (the Kotlin compiler's OWN tooling
+                // classpath - separate from anything app/build.gradle
+                // declares) needs trove4j underneath kotlin-compiler-embeddable.
+                includeGroup "org.jetbrains.intellij.deps"
+
+                // NOT YET REPORTED BY CI - added from manual review, since
+                // the test classpath (which pulls these in) has not been
+                // exercised by CI yet at the time of writing (only the main
+                // debugRuntimeClasspath and kotlinCompilerClasspath have
+                // failed and been fixed so far). org.robolectric:robolectric
+                // has a dependency tree that reaches well outside its own
+                // group - these are its well-known transitive dependencies:
+                // ASM (bytecode instrumentation for its sandbox/shadow
+                // classloader), a legacy SQLite binding, a bundled TLS
+                // provider, and a couple of small annotation-only jars.
+                // Flagged here as "likely but not personally verified
+                // against a real resolved dependency tree" - this
+                // environment has no network access to actually run
+                // `gradle :app:dependencies` and confirm the exact set, so
+                // treat this list as a strong best-effort, not a guarantee.
+                // If the unit-tests CI job still fails with "Could not
+                // find <group>:<artifact>", the fix is the same as every
+                // time before: read the group off the error and add it.
+                includeGroup "org.ow2.asm"
+                includeGroup "com.almworks.sqlite4java"
+                includeGroup "org.conscrypt"
+                includeGroup "javax.annotation"
+                includeGroup "com.google.auto.value"
+                includeGroup "com.google.auto.service"
             }
         }
     }
