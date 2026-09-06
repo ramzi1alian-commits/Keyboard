@@ -17,6 +17,23 @@ environment without network access).
    from quietly adding an untrusted third-party repository. This closes
    **dependency confusion** attacks (a same-named malicious package published
    to a different, unvetted host).
+
+   **Maintenance note (learned from a real CI failure, not hypothetical):**
+   content filtering restricts resolution for every group that appears
+   *anywhere* in the dependency graph, including groups this project never
+   declares directly - `androidx.appcompat`/`com.google.android.material`/
+   `org.jetbrains.kotlin` each pull in their own further dependencies
+   (`org.jetbrains:annotations`, `com.google.errorprone:error_prone_annotations`,
+   `com.google.guava:listenablefuture`, `org.hamcrest:hamcrest-core`, etc.),
+   and every one of those transitive groups needs its own `includeGroup` line
+   too, or the build fails with `Could not find <group>:<artifact>:<version>`
+   even though nothing about the declared dependencies changed. **Bumping any
+   version in `app/build.gradle` (or the AGP/Kotlin plugin versions in the
+   root `build.gradle`) can surface a brand new transitive group that was not
+   needed before** - if CI fails this way, the fix is to add the missing
+   group (read straight off the "Required by:" trace in the error) to the
+   `mavenCentral` (or `google`) content block in `settings.gradle`, not to
+   loosen or remove the filtering.
 3. **Dependency locking** (`dependencyLocking { lockAllConfigurations() }` in
    `app/build.gradle`, `activateDependencyLocking()` on the buildscript
    classpath in the root `build.gradle`) — once lockfiles are generated (step

@@ -25,6 +25,33 @@ dependencyResolutionManagement {
                 includeGroupByRegex "org\\.junit.*"
                 includeGroup "junit"
                 includeGroup "org.robolectric"
+                // FIXED (build failure): these three are not dependencies
+                // this project declares directly - they are TRANSITIVE
+                // dependencies pulled in underneath ones that ARE declared
+                // (kotlin-stdlib pulls org.jetbrains:annotations; material
+                // pulls com.google.errorprone:error_prone_annotations;
+                // appcompat/core-ktx pull com.google.guava:listenablefuture
+                // via profileinstaller/concurrent-futures). Content-filtered
+                // repositories restrict resolution for EVERY group in the
+                // whole dependency graph, not just the ones app/build.gradle
+                // mentions by name - so every transitive group needs its own
+                // entry here too, or resolution fails with "Could not find"
+                // even though nothing about the declared dependencies
+                // changed. If a future dependency bump pulls in still more
+                // new transitive groups, expect the same failure shape again
+                // ("Could not find <group>:<artifact>:<version> - Required
+                // by: ...") and add that group here the same way.
+                includeGroup "org.jetbrains"
+                includeGroup "com.google.errorprone"
+                includeGroup "com.google.guava"
+                // Not yet reported by CI, but added proactively: junit:junit
+                // depends on org.hamcrest:hamcrest-core, and this project's
+                // debugRuntimeClasspath resolution (the one that just failed)
+                // is a different configuration from the test classpaths that
+                // pull in JUnit/Robolectric - so this exact same failure
+                // shape is very likely to appear next, once the unit-tests
+                // CI job resolves ITS classpath, if this isn't added now.
+                includeGroup "org.hamcrest"
             }
         }
     }
