@@ -29,6 +29,8 @@ android {
     compileSdk 34
 
     defaultConfig {
+        // Optional release-time signing-certificate pin. Leave empty for local/dev builds.
+        buildConfigField "String", "EXPECTED_CERT_SHA256", "\"\""
         // Changed from com.securekeyboard.app -> com.securekeyboard.pro so
         // this build installs as a SEPARATE app next to any older version
         // already on the device, instead of overwriting/removing it.
@@ -38,8 +40,8 @@ android {
         applicationId "com.securekeyboard.pro"
         minSdk 24
         targetSdk 34
-        versionCode 19
-        versionName "3.7"
+        versionCode 40
+        versionName "4.0"
     }
 
     signingConfigs {
@@ -59,6 +61,13 @@ android {
                 keyAlias System.getenv("RELEASE_KEY_ALIAS")
                 keyPassword System.getenv("RELEASE_KEY_PASSWORD")
             }
+        }
+    }
+
+    def expectedCert = project.findProperty("secureKeyboardExpectedCertSha256")
+    if (expectedCert != null && expectedCert.toString().trim()) {
+        buildTypes.each { type ->
+            type.buildConfigField "String", "EXPECTED_CERT_SHA256", "\"${expectedCert.toString().trim()}\""
         }
     }
 

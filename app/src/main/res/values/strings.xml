@@ -163,4 +163,5 @@
     <string name="pairing_name_required">أدخل اسم جهة الاتصال أولًا</string>
 
     <string name="secure_file_receive_title">فك ملف SecureKeyboard</string>
+    <string name="security_environment_warning">تحذير أمني: بيئة تشغيل غير موثوقة أو خاضعة للمراقبة. لا تجرِ عمليات حساسة على هذا الجهاز.</string>
 </resources>

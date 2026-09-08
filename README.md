@@ -380,3 +380,13 @@ New message encryption uses a conservative Argon2id memory profile suitable for 
 V20 adds an automated security gate (`scripts/security_audit.sh`), explicit cleartext-traffic denial, stronger cleanup on file-encryption failures, and a documented security/release boundary. See `V20_HIGH_ASSURANCE_SECURITY_FOUNDATION.md` and `V20_RELEASE_SECURITY_CHECKLIST.md`.
 
 V20 is **not** a military/FIPS certification. It is an engineering foundation intended to be suitable for independent high-assurance security review.
+
+## V40 security-audit candidate
+
+V40 adds local runtime integrity/anti-instrumentation checks and carries forward the V39 authenticated two-pass file-decryption hardening. See `docs/security/V40_SECURITY_AUDIT_READINESS.md` and run `scripts/v40_audit.sh` before handing the source to an auditor.
+
+## GitHub security build
+
+For CI pre-audit, run the GitHub Actions workflow `.github/workflows/v40-preaudit.yml`.
+It runs the static security audits, JVM tests, and debug/release APK builds and publishes SHA-256 evidence as workflow artifacts.
+The separate `dependency-verification-bootstrap.yml` workflow generates dependency verification metadata for manual review before it is committed.

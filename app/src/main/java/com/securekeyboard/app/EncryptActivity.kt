@@ -127,8 +127,13 @@ class EncryptActivity : AppCompatActivity() {
         rootWarningText = findViewById(R.id.rootWarningText)
         sessionKeyStatus = findViewById(R.id.sessionKeyStatus)
 
-        if (RootCheck.looksRooted()) {
+        val initialPosture = SecurityRuntime.assess(this)
+        if (initialPosture.rootedHeuristic) {
             rootWarningText.text = getString(R.string.warn_root_detected)
+            rootWarningText.visibility = View.VISIBLE
+        }
+        if (!initialPosture.trustedForSensitiveOps) {
+            rootWarningText.text = getString(R.string.security_environment_warning)
             rootWarningText.visibility = View.VISIBLE
         }
 
@@ -177,6 +182,7 @@ class EncryptActivity : AppCompatActivity() {
 
         findViewById<MaterialButton>(R.id.btnEncryptAction).setOnClickListener {
             hideError()
+            if (!allowSensitiveOperation()) return@setOnClickListener
             // FIX (found in follow-up review): this used to read the
             // plaintext as inputText.text.toString() - an immutable
             // String that can never be wiped from memory, exactly the
@@ -223,6 +229,7 @@ class EncryptActivity : AppCompatActivity() {
 
         findViewById<MaterialButton>(R.id.btnDecryptAction).setOnClickListener {
             hideError()
+            if (!allowSensitiveOperation()) return@setOnClickListener
             // The ciphertext itself is NOT sensitive (it's meant to be
             // shared/stored openly - only the plaintext and key are
             // secret), so it's fine to read this one as a String.
@@ -399,6 +406,13 @@ class EncryptActivity : AppCompatActivity() {
     }
 
     /** Reads an EditText's Editable directly into a CharArray without ever creating a String copy. */
+    private fun allowSensitiveOperation(): Boolean {
+        val posture = SecurityRuntime.assess(this)
+        if (posture.trustedForSensitiveOps) return true
+        showError(getString(R.string.security_environment_warning))
+        return false
+    }
+
     private fun editableToCharArray(editable: Editable?): CharArray {
         if (editable == null || editable.isEmpty()) return CharArray(0)
         val chars = CharArray(editable.length)
