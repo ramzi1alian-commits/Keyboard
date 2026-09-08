@@ -196,6 +196,35 @@ object SecureFileCrypto {
         }
     }
 
+    private fun decryptEcdhe(context: Context, input: java.io.InputStream, prefix: ByteArray, passphrase: CharArray, temp: File): Pair<File, String> {
+        val rest = ByteArray(ECDHE_FIXED_HEADER - 5)
+        readFully(input, rest)
+        val ephLen = ByteBuffer.wrap(rest, 0, 2).short.toInt() and 0xffff
+        require(ephLen in 50..EPHEMERAL_MAX) { "invalid ephemeral key" }
+        val ephemeralBytes = ByteArray(ephLen)
+        readFully(input, ephemeralBytes)
+        val tail = rest.copyOfRange(2, rest.size)
+        val metaLen = ByteBuffer.wrap(tail, tail.size - 4, 4).int
+        require(metaLen in 16..MAX_METADATA_CIPHER) { "invalid metadata" }
+        val header = prefix + rest.copyOfRange(0, 2) + ephemeralBytes + tail
+        val metaIv = tail.copyOfRange(0, IV_LENGTH)
+        val contentIv = tail.copyOfRange(IV_LENGTH, IV_LENGTH * 2)
+        val metaCipher = ByteArray(metaLen)
+        var key = ByteArray(0)
+        try {
+            readFully(input, metaCipher)
+            val ephemeralPublic = KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(ephemeralBytes))
+            key = ContactCrypto.deriveAes256KeyFromEphemeralPublic(context, ephemeralPublic, passphrase, ContactCrypto.Purpose.FILE)
+            val filenameBytes = aesGcmDecrypt(key, metaIv, header.copyOf(header.size - 4), metaCipher)
+            val filename = try { String(filenameBytes, Charsets.UTF_8) } finally { Arrays.fill(filenameBytes, 0) }
+            decryptContent(input, temp, key, contentIv, header, metaCipher)
+            return temp to filename
+        } finally {
+            Arrays.fill(key, 0); Arrays.fill(rest, 0); Arrays.fill(ephemeralBytes, 0); Arrays.fill(tail, 0)
+            Arrays.fill(metaIv, 0); Arrays.fill(contentIv, 0); Arrays.fill(metaCipher, 0); Arrays.fill(header, 0)
+        }
+    }
+
     private fun verifyLegacy(context: Context, input: java.io.InputStream, prefix: ByteArray, contactPublicKey: PublicKey, passphrase: CharArray): String {
         val rest = ByteArray(LEGACY_HEADER_LENGTH - 5)
         val header = prefix + rest
