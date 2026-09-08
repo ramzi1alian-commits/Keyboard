@@ -88,7 +88,7 @@ fi
 check_present 'dependencyLocking' "$ROOT/app/build.gradle" "Dependency locking enabled (app module)"
 check_present 'activateDependencyLocking' "$ROOT/build.gradle" "Dependency locking enabled (buildscript classpath)"
 check_present 'org\.gradle\.dependency\.verification=strict' "$ROOT/gradle.properties" "Dependency checksum verification set to strict"
-check_present 'FAIL_ON_PROJECT_REPOS' "$ROOT/settings.gradle" "Repository content filtering enforced"
+check_present 'FAIL_ON_PROJECT_REPOS' "$ROOT/settings.gradle" "Central repository ownership enforced"
 
 if [[ -f "$ROOT/docs/security/THREAT_MODEL.md" ]]; then
   echo "PASS: threat model document present"

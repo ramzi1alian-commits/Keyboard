@@ -25,6 +25,9 @@ dependencyLocking {
 }
 
 android {
+    buildFeatures {
+        buildConfig true
+    }
     namespace 'com.securekeyboard.app'
     compileSdk 34
 

@@ -56,3 +56,9 @@ For the final production/audit artifact, use the organization's controlled relea
 ## Release decision
 
 **Do not call V40 build-verified yet.** It is suitable as a source-level pre-audit candidate, but the external auditor should receive a build produced and signed in a controlled environment, together with the resulting APK hash and test logs.
+
+
+## CI failure correction
+- Corrected Android Gradle Plugin BuildConfig configuration by enabling `android.buildFeatures.buildConfig true`.
+- This fixes the configuration failure reported by GitHub Actions when `defaultConfig` declares `buildConfigField`.
+- A fresh GitHub Actions run is required to verify the full build and tests.

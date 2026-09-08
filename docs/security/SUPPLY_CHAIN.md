@@ -52,7 +52,7 @@ environment without network access).
 **Status: not yet done in this repository.** `app/gradle.lockfile`,
 the buildscript-classpath lockfile, and `gradle/verification-metadata.xml`
 do not exist yet, even though locking and `strict` verification are already
-turned on above. Until this step is completed, `android.yml` and
+turned on above. Until this step is completed, `v40-preaudit.yml` and
 `codeql.yml` will deliberately fail fast at their "Verify supply-chain
 bootstrap has run" step (rather than a confusing raw Gradle error) - this is
 expected, not a regression.
@@ -60,7 +60,7 @@ expected, not a regression.
 Two ways to do this:
 
 **Option A — recommended: run the bootstrap workflow.**
-`.github/workflows/bootstrap-supply-chain.yml` does this on a
+`.github/workflows/dependency-verification-bootstrap.yml` does this on a
 network-enabled GitHub Actions runner (this environment building the
 project has none). From the repo's Actions tab, run it via
 `workflow_dispatch`. It opens a pull request containing the generated
@@ -94,7 +94,7 @@ After either option, commit/merge:
 
 ## CI enforcement
 
-`.github/workflows/android.yml` now runs Gradle with `--write-locks`
+`.github/workflows/v40-preaudit.yml` now runs Gradle with `--write-locks`
 disabled and `--locked` implied by the committed lockfiles + `strict`
 verification mode, so CI itself will fail (not silently pass) if:
 - the lockfiles are missing entirely, or
